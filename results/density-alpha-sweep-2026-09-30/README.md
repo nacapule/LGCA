@@ -8,7 +8,7 @@ L = 90, 120, 180, 240, seeds 12345, 777 and 424242.
 
 | File | Contents |
 |---|---|
-| `figures/focus-transition-t20000-prelim.png` | Cluster density vs time at alpha 0.8, 0.85, 0.9, 1; first 5,000 steps above, full run below |
+| `figures/focus-transition-t20000-prelim.png` | Cluster density vs time at alpha 0.8, 0.85, 0.9, 1. Top: time axis linear up to step 500 and logarithmic after, so the early rise is wide; bottom: full run on a linear axis |
 | `figures/grid-time-t20000-prelim.png` | The same curves for alpha 0 to 1 in steps of 0.1 (log–log axes) |
 | `figures/grid-time-refine-t20000-prelim.png` | The same curves for alpha 0.75 to 1 in finer steps |
 | `figures/condensate-vs-box-size-t20000.png` | Late condensate size N_c against box side |

@@ -241,31 +241,44 @@ def plot_time_grid(alphas, times, curves, densities, seeds, name):
 
 
 def plot_focus(times, curves, densities, seeds):
-    """Four alphas side by side on a linear time axis: first 5,000 steps
-    enlarged above, the full run below."""
+    """Four alphas side by side. Top row: time axis linear up to step 500,
+    logarithmic after, so the early rise and the long run share one panel
+    (dots = saved samples up to step 500). Bottom row: plain linear time."""
     colour, scale = density_colours(densities)
-    fig, axes = plt.subplots(2, len(FOCUS_ALPHAS),
-                             figsize=(4.1 * len(FOCUS_ALPHAS) + 0.8, 5.6),
-                             layout="constrained", squeeze=False,
-                             gridspec_kw={"height_ratios": [2.2, 1]})
+    fig, axes = plt.subplots(2, len(FOCUS_ALPHAS), figsize=(16, 7),
+                             layout="constrained", squeeze=False, sharey=True,
+                             gridspec_kw={"height_ratios": [3, 1]})
+    ticks = [0, 100, 200, 300, 500, 1000, 2000, 5000, 10000, 20000]
     for column, alpha in enumerate(FOCUS_ALPHAS):
+        top, bottom = axes[:, column]
         for dens in densities:
             values = curves[curve_column(alpha, dens)]
-            for ax, stop in zip(axes[:, column], [5000, T]):
-                shown = times <= stop
-                ax.plot(times[shown], values[shown], color=colour[dens], lw=1.1)
-        for ax, stop in zip(axes[:, column], [5000, T]):
+            top.plot(times, values, color=colour[dens], lw=1.1)
+            early = times <= 500
+            top.plot(times[early], values[early], ls="none", marker="o", ms=2.6,
+                     color=colour[dens])
+            bottom.plot(times, values, color=colour[dens], lw=1.1)
+        top.set_xscale("symlog", linthresh=500, linscale=1.5)
+        top.set_xlim(0, T)
+        top.set_xticks(ticks)  # labels come from number_label below
+        top.xaxis.set_minor_formatter(NullFormatter())
+        top.axvline(500, color="#9aa3a7", lw=0.8, ls=":")
+        top.text(500, 0.015, " linear ← | → log ", transform=top.get_xaxis_transform(),
+                 ha="center", va="bottom", fontsize=7.5, color="#7a8488",
+                 backgroundcolor="#fcfcfa")
+        bottom.set_xlim(0, T)
+        bottom.set_xlabel("Simulation step")
+        for ax in (top, bottom):
             ax.set_yscale("log")
-            ax.set_xlim(0, stop)
             ax.grid(alpha=0.18)
             ax.xaxis.set_major_formatter(FuncFormatter(number_label))
             ax.yaxis.set_major_formatter(FuncFormatter(number_label))
             ax.yaxis.set_minor_formatter(NullFormatter())
-        axes[0, column].set_title(f"α = {alpha:g} · {seeds[alpha]} seeds",
-                                  loc="left", fontsize=11, fontweight="bold")
-        axes[1, column].set_xlabel("Simulation step")
-    axes[0, 0].set_ylabel("Cluster density (particles/site)\nfirst 5,000 steps")
-    axes[1, 0].set_ylabel("full run")
+        top.set_title(f"α = {alpha:g} · {seeds[alpha]} seeds",
+                      loc="left", fontsize=11, fontweight="bold")
+    axes[0, 0].set_ylabel("Cluster density (particles/site)\n"
+                          "time axis linear to 500, log after")
+    axes[1, 0].set_ylabel("full run, linear time")
     fig.colorbar(scale, ax=axes, shrink=0.7, pad=0.01).set_label(
         "Starting average density (particles/site)")
     fig.suptitle("Cluster density vs time · 90×90, centre + neighbours, sens 6 · "
@@ -315,8 +328,12 @@ def draw_figures():
 
     table = read_csv(TIME_CSV)
     times = np.array([int(row["t"]) for row in table])
+    # A cluster density of 0 means no site passed the cutoff (only at t = 0 for
+    # the densest starts); leave those points out rather than plot log(0).
     curves = {name: np.array([float(row[name]) for row in table])
               for name in table[0] if name != "t"}
+    curves = {name: np.where(values > 0, values, np.nan)
+              for name, values in curves.items()}
 
     box_rows = [{key: float(value) for key, value in row.items()}
                 for row in read_csv(BOX_CSV)]

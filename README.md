@@ -1,10 +1,10 @@
 # LGCA
 
-My fork of the LGCA code (hexagonal lattice gas, with fermion and boson versions).
+This is a fork of the LGCA code (hexagonal lattice gas, with fermion and boson versions).
 The original C++ is `lgca/lgca_clean-1.cpp`, with the WELL1024a random generator in
-`rng/` and CImg in `CImg/` for the window display. I did not change these files.
+`rng/` and CImg in `CImg/` for the window display. We did not change these files.
 
-What I add is two things: a version of the model that runs in the browser (LGCA Lab),
+What we add is two things: a version of the model that runs in the browser (LGCA Lab),
 and the results of the alpha study we talked about in September.
 
 ## LGCA Lab
@@ -49,7 +49,7 @@ and `build/figures.py` makes the figures again from them.
 ## Resumen
 
 LGCA Lab es el código en C++ pasado a JavaScript; con la misma semilla da la misma red
-en cada paso y los mismos números aleatorios (lo compruebo en 10 casos). Se abre en el
+en cada paso y los mismos números aleatorios (lo comprobamos en 10 casos). Se abre en el
 navegador, sin instalar nada. El estudio más reciente busca para qué alpha la
 densidad del cúmulo sigue creciendo al meter más partículas: las figuras son la
 densidad del cúmulo contra el tiempo para 12 densidades iniciales, y el tamaño del

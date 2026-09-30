@@ -1,4 +1,4 @@
-# How I check the JavaScript against the C++
+# How we check the JavaScript against the C++
 
 Reference is `lgca/lgca_clean-1.cpp` with WELL1024a from `rng/`. With the same seed and
 the C++ settings, the Lab keeps the same channel occupations, the same random draws in

@@ -20,18 +20,25 @@ for p in sorted((out / 'data').glob('both-L90-*/run.json')):
 if len(sys.argv) > 1:
     T = int(sys.argv[1])
 else:
-    T = min(r['reached'] for r in runs if r['seed'] == 12345)
+    sys.exit('usage: plots.py T [seed,seed,...] [min_seeds]')  # always pass T: running jobs would lower it
 use = [r for r in runs if r['reached'] >= T]
 if len(sys.argv) > 2:  # optional seed filter, e.g. 12345,777
     keep = {int(x) for x in sys.argv[2].split(',')}; use = [r for r in use if r['seed'] in keep]
 dens = sorted({r['dens'] for r in use})
-# Keep only alphas whose whole density row has the full seed count (partially finished stages are left out).
-cnt = {}
-for r in use: cnt[(r['alpha'], r['dens'])] = cnt.get((r['alpha'], r['dens']), 0) + 1
-target = max(cnt.values())
-alphas = sorted(a for a in {k[0] for k in cnt} if all(cnt.get((a, d), 0) == target for d in dens))
-use = [r for r in use if r['alpha'] in alphas]
+# Each alpha row uses ONE seed set: the seeds present at every density of that row (unfinished stages drop out).
+# argv[3] = minimum seeds per row (default: the largest row seed count present); rows below it are left out.
+cellSeeds = {}
+for r in use: cellSeeds.setdefault((r['alpha'], r['dens']), set()).add(r['seed'])
+rowSeeds = {a: set.intersection(*[cellSeeds.get((a, d), set()) for d in dens]) for a in {k[0] for k in cellSeeds}}
+target = int(sys.argv[3]) if len(sys.argv) > 3 else max(len(v) for v in rowSeeds.values())
+rowSeeds = {a: v for a, v in rowSeeds.items() if len(v) >= target}
+alphas = sorted(rowSeeds)
+use = [r for r in use if r['alpha'] in rowSeeds and r['seed'] in rowSeeds[r['alpha']]]
+def seedLabel(alist):
+    ks = sorted({len(rowSeeds[a]) for a in alist})
+    return f'mean of {ks[0]} seeds' if len(ks) == 1 else f'mean of {ks[0]}–{ks[-1]} seeds (per panel)'
 lo = int(T * .75) + 100
+SUF = sys.argv[4] if len(sys.argv) > 4 else ''  # optional output-name suffix, e.g. -prelim
 
 def cut(r, key):
     ts = np.array([m['t'] for m in r['series'] if m['t'] <= T]); v = np.array([m[key] for m in r['series'] if m['t'] <= T])
@@ -52,17 +59,18 @@ for a in alphas:
                      'late_cluster_density': float(np.mean(late)), 'seed_min': float(min(late)), 'seed_max': float(max(late)),
                      'ratio_to_mean': float(np.mean(late) / mean), 'cutoff': math.ceil(2 * mean),
                      'late_cluster_mass_fraction': float(np.mean(lf))})
-with open(out / f'summary-t{T}.csv', 'w', newline='') as f:
+with open(out / f'summary-t{T}{SUF}.csv', 'w', newline='') as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
-(out / f'summary-t{T}.json').write_text(json.dumps(rows))
+(out / f'summary-t{T}{SUF}.json').write_text(json.dumps(rows))
 
 plt.rcParams.update({'font.size': 9, 'axes.spines.top': False, 'axes.spines.right': False, 'axes.labelcolor': '#19252d',
                      'text.color': '#19252d', 'xtick.color': '#19252d', 'ytick.color': '#19252d',
                      'figure.facecolor': '#fcfcfa', 'axes.facecolor': '#fcfcfa', 'savefig.facecolor': '#fcfcfa'})
 cmap = plt.get_cmap('viridis')
-col = {d: cmap(0.92 * i / max(1, len(dens) - 1)) for i, d in enumerate(dens)}
+dnorm = LogNorm(6 * dens[0], 6 * dens[-1])  # curve colours and colour bar share this scale
+col = {d: cmap(dnorm(6 * d)) for d in dens}
 kfmt = FuncFormatter(lambda v, _: f'{v:g}' if v < 1000 else f'{v / 1000:g}k')
-seedsTxt = sorted({r['seed'] for r in use}); nS = min(r['seeds'] for r in rows)
+seedsTxt = sorted({r['seed'] for r in use})
 
 # 1. Small multiples: cluster density vs time, one panel per alpha, one curve per starting density (log-log).
 def grid(alist, name):
@@ -76,20 +84,20 @@ def grid(alist, name):
           ax.plot(ts[1:], v[1:], color=col[d], lw=1.1)
       ax.set_xscale('log'); ax.set_yscale('log'); ax.set_xlim(25, T); ax.grid(alpha=.18, which='major')
       ax.xaxis.set_major_formatter(kfmt); ax.yaxis.set_major_formatter(kfmt); ax.yaxis.set_minor_formatter(NullFormatter())
-      ax.set_title(f'α = {a:g}', loc='left', fontsize=10, fontweight='bold')
+      ax.set_title(f'α = {a:g}' + (f' · {len(rowSeeds[a])} seeds' if len({len(rowSeeds[b]) for b in alist}) > 1 else ''), loc='left', fontsize=10, fontweight='bold')
   for ax in axes.flat[n:]: ax.axis('off')
   for ax in axes[:, 0]: ax.set_ylabel('Cluster density\n(particles/site)')
   for ax in axes[-1, :]: ax.set_xlabel('Simulation step')
-  sm = plt.cm.ScalarMappable(cmap=cmap, norm=LogNorm(6 * dens[0], 6 * dens[-1] / .92 * .92))
+  sm = plt.cm.ScalarMappable(cmap=cmap, norm=dnorm)
   cb = fig.colorbar(sm, ax=axes, shrink=.6, pad=.01); cb.set_label('Starting average density (particles/site)')
   fig.suptitle(f'Cluster density vs time · {len(dens)} starting densities · 90×90, centre + neighbours, sens 6 · '
-               f'{"mean of " + str(nS) + " seeds" if nS > 1 else "seed " + str(seedsTxt[0])} · to {T:,} steps',
+               f'{seedLabel(alist)} · to {T:,} steps',
                x=.01, ha='left', fontsize=10, color='#5a676c')
-  for ext in ['png', 'pdf']: fig.savefig(figdir / f'{name}-t{T}.{ext}', dpi=150)
+  for ext in ['png', 'pdf']: fig.savefig(figdir / f'{name}-t{T}{SUF}.{ext}', dpi=150)
   plt.close(fig)
 
 
-sm = plt.cm.ScalarMappable(cmap=cmap, norm=LogNorm(6 * dens[0], 6 * dens[-1]))
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=dnorm)
 base = [0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1]
 grid([a for a in alphas if a in base], 'grid-time')
 grid([a for a in alphas if a not in base or a in (.8, .9, 1)], 'grid-time-refine')
@@ -105,13 +113,14 @@ for a in alphas:
     axs[1].plot(x, [r['ratio_to_mean'] for r in rr], '-o', ms=3, color=c, lw=1.3, label=f'α {a:g}')
 xm = sorted({r['mean_density'] for r in rows})
 axs[0].plot(xm, [math.ceil(2 * m) for m in xm], '--', color='#7a8488', lw=1, label='cutoff 2×avg')
-axs[1].axhline(2, ls='--', color='#7a8488', lw=1)
+axs[1].plot(xm, [math.ceil(2 * m) / m for m in xm], '--', color='#7a8488', lw=1, label='cutoff ÷ avg')
+axs[0].legend(handles=[axs[0].lines[-1]], frameon=False, fontsize=8, loc='upper left')
 for ax, yl in zip(axs, ['Late cluster density (particles/site)', 'Cluster density ÷ average density']):
     ax.set_xscale('log'); ax.set_yscale('log'); ax.grid(alpha=.18); ax.set_xlabel('Average density (particles/site)'); ax.set_ylabel(yl)
     ax.xaxis.set_major_formatter(kfmt); ax.yaxis.set_major_formatter(kfmt)
 axs[1].legend(frameon=False, fontsize=8, ncol=2, loc='upper right')
-fig.suptitle(f'Late level (steps {lo:,}–{T:,}) · {nS} seed(s)', x=.01, ha='left', fontsize=10, color='#5a676c')
-for ext in ['png', 'pdf']: fig.savefig(figdir / f'late-vs-density-t{T}.{ext}', dpi=150)
+fig.suptitle(f'Late level (steps {lo:,}–{T:,}) · {seedLabel(alphas)}', x=.01, ha='left', fontsize=10, color='#5a676c')
+for ext in ['png', 'pdf']: fig.savefig(figdir / f'late-vs-density-t{T}{SUF}.{ext}', dpi=150)
 plt.close(fig)
 
 # 3. Map: alpha x starting density, colour = cluster density / average density.
@@ -126,8 +135,9 @@ for i in range(n):
                                           color='white' if M[i, j] < 30 else 'black')
 ax.set_xlabel('Starting average density (particles/site)'); ax.set_ylabel('α')
 cb = fig.colorbar(im, ax=ax, pad=.01); cb.set_label('Cluster density ÷ average density')
-ax.set_title(f'How many times denser than average the largest cluster is · steps {lo:,}–{T:,} · {nS} seed(s)', loc='left', fontsize=9.5, color='#5a676c')
-for ext in ['png', 'pdf']: fig.savefig(figdir / f'map-ratio-t{T}.{ext}', dpi=150)
+seedRows = sorted({r['seeds'] for r in rows}, reverse=True)
+ax.set_title(f'Largest cluster density ÷ average density · steps {lo:,}–{T:,} · ' + ' / '.join(f'{k}' for k in seedRows) + ' seeds' + (' (coarse / finer α)' if len(seedRows) > 1 else ''), loc='left', fontsize=9.5, color='#5a676c')
+for ext in ['png', 'pdf']: fig.savefig(figdir / f'map-ratio-t{T}{SUF}.{ext}', dpi=150)
 plt.close(fig)
 # 4. Manik-style view: linear time, several alphas side by side, first 5k enlarged above the full run.
 def focus(alist, name):
@@ -145,13 +155,13 @@ def focus(alist, name):
         for ax, stop in zip(axes[:, k], [5000, T]):
             ax.set_yscale('log'); ax.set_xlim(0, stop); ax.grid(alpha=.18); ax.xaxis.set_major_formatter(kfmt)
             ax.yaxis.set_major_formatter(kfmt); ax.yaxis.set_minor_formatter(NullFormatter())
-        axes[0, k].set_title(f'α = {a:g}', loc='left', fontsize=11, fontweight='bold')
+        axes[0, k].set_title(f'α = {a:g} · {len(rowSeeds[a])} seeds', loc='left', fontsize=11, fontweight='bold')
         axes[1, k].set_xlabel('Simulation step')
     axes[0, 0].set_ylabel('Cluster density (particles/site)\nfirst 5,000 steps'); axes[1, 0].set_ylabel(f'full run')
     cb = fig.colorbar(sm, ax=axes, shrink=.7, pad=.01); cb.set_label('Starting average density (particles/site)')
-    fig.suptitle(f'Cluster density vs time · 90×90, centre + neighbours, sens 6 · {"mean of " + str(nS) + " seeds" if nS > 1 else "seed " + str(seedsTxt[0])}',
+    fig.suptitle(f'Cluster density vs time · 90×90, centre + neighbours, sens 6 · {seedLabel(alist)}',
                  x=.01, ha='left', fontsize=10, color='#5a676c')
-    for ext in ['png', 'pdf']: fig.savefig(figdir / f'{name}-t{T}.{ext}', dpi=150)
+    for ext in ['png', 'pdf']: fig.savefig(figdir / f'{name}-t{T}{SUF}.{ext}', dpi=150)
     plt.close(fig)
 focus([.8, .85, .9, 1], 'focus-transition'); focus([0, .4, .8], 'focus-low-alpha')
 

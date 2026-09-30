@@ -68,9 +68,11 @@ if(process.argv[2]==='job'){
  const seeds=(arg('seeds')||allSeeds.join(',')).split(',').map(Number);
  if(!ticks.includes(end))throw Error('end must be a checkpoint');
  mkdirSync(data,{recursive:true});
- writeJSON(join(data,'manifest-size.json'),{created:'2026-09-30',engineHash,sizes,sizeAlphas,sizeDens,allSeeds,sens,field,model:'boson',alignment:'polar',kernel:'power',checkpoints:ticks,measurementSchedule:'every 25 steps through 5000, every 100 thereafter',question:'Box-size scaling at fixed density, centre plus neighbours (L90 taken from the main sweep)'});
+ writeJSON(join(data,'manifest-size.json'),{created:'2026-09-30',engineHash,sizes:[90,120,180,240],sizeAlphas:[.8,.82,.84,.85,.86,.88,.9,1],sizeDens,allSeeds,sens,field,model:'boson',alignment:'polar',kernel:'power',checkpoints:ticks,measurementSchedule:'every 25 steps through 5000, every 100 thereafter',question:'Box-size scaling at fixed density, centre plus neighbours (L90 taken from the main sweep)'});
  const jobs=[];
- for(const seed of seeds)for(const size of [...sizes].reverse())for(const alpha of sizeAlphas)jobs.push(idOf(size,alpha,sizeDens,seed));
+ // --sizes / --alphas override the defaults (added Sep 30 to bracket the divergence between alpha .8 and .9).
+ const useSizes=arg('sizes')?arg('sizes').split(',').map(Number):sizes,useAlphas=arg('alphas')?arg('alphas').split(',').map(Number):sizeAlphas;
+ for(const size of useSizes)for(const seed of seeds)for(const alpha of useAlphas)jobs.push(idOf(size,alpha,sizeDens,seed));
  let next=0,done=0,copied=0;const t0=Date.now();
  async function worker(){while(next<jobs.length){const id=jobs[next++],dir=join(data,id),old=join(oldData,id);
   if(reached(dir)>=end){done++;continue;}

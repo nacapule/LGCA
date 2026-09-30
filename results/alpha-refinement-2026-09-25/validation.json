@@ -1,0 +1,16 @@
+{
+  "runs": 60,
+  "states": 420,
+  "pilotMatches": 6,
+  "engineHash": "e583f58fd3d16ab1c623c2ab9d8b0b5f7b9a655e98304eea30f8baca3e83127a",
+  "unchangedFromParityVerifiedEngine": true,
+  "nonnegativeAndConserved": true,
+  "recomputedClusterStatistics": true,
+  "pairedInitialization": true,
+  "resumeCheck": {
+    "id": "neigh-L120-a0.85-d0.4-seed12345",
+    "from": 10000,
+    "to": 80000,
+    "stateAndRngExact": true
+  }
+}

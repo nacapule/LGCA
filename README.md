@@ -50,7 +50,7 @@ and `build/figures.py` makes the figures again from them.
 
 LGCA Lab es el código en C++ pasado a JavaScript; con la misma semilla da la misma red
 en cada paso y los mismos números aleatorios (lo compruebo en 10 casos). Se abre en el
-navegador, sin instalar nada. El estudio del 30 de septiembre busca para qué alpha la
+navegador, sin instalar nada. El estudio más reciente busca para qué alpha la
 densidad del cúmulo sigue creciendo al meter más partículas: las figuras son la
 densidad del cúmulo contra el tiempo para 12 densidades iniciales, y el tamaño del
 condensado N_c contra el tamaño de la caja.

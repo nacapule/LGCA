@@ -10,13 +10,13 @@ and the results of the alpha study we talked about in September.
 ## LGCA Lab
 
 Open it here: https://nacapule.github.io/LGCA/lgca-viz/lgca-lab.html, or open
-`lgca-viz/lgca-lab.html` directly (is one HTML file, nothing to install).
+`lgca-viz/lgca-lab.html` directly.
 
 The Lab is the C++ translated to JavaScript, random generator included, so with the
 same seed and the same parameters it gives the same lattice in every step and the same
 random numbers than the C++. Default parameters are the ones of the C++. The alpha
-normalization and the field with centre site + 6 neighbours are options I added for
-the study, they are off by default.
+normalization and the field with centre site + 6 neighbours are options added for
+the study.
 
 To check it against the C++: `node lgca-viz/verify-parity.mjs` (needs Node.js and a
 C++ compiler). It compiles the C++ and compares the whole lattice and the full state of
@@ -27,7 +27,7 @@ different seeds, densities and sensitivities. More detail in [docs/FIDELITY.md](
 
 Question: for which alpha the cluster density keeps growing when we put more particles.
 The alignment field is divided by M^alpha, with M the number of particles that
-contribute to the field. Alpha 0 is the original sum, alpha 1 is the average. I use
+contribute to the field. Alpha 0 is the original sum, alpha 1 is the average. We use
 polar bosons, field from the centre site and its 6 neighbours, sensitivity 6.
 Definitions in [docs/PHYSICS.md](docs/PHYSICS.md).
 

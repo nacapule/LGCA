@@ -1,0 +1,1701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LGCA Lab — hexagonal lattice-gas explorer</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --surface-2:#f1efe9; --border:#dedcd2;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#8a887f;
+    --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100;
+    --accent:#2a78d6; --grid:#e4e2d9;
+    --reset-bg:#f7ece0; --reset-bd:#e4d3bd; --reset-fg:#8a5520;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      color-scheme: dark;
+      --surface-1:#1a1a19; --surface-2:#242422; --border:#3a3936;
+      --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8a887f;
+      --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
+      --accent:#3987e5; --grid:#31302d;
+      --reset-bg:#2f2418; --reset-bd:#46351f; --reset-fg:#e0b070;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-1);color:var(--text-primary);
+       font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:14px}
+  h1{font-size:17px;margin:0 0 2px}
+  .sub{color:var(--text-secondary);font-size:12px;margin:0 0 12px}
+  .wrap{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+  .card{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px}
+  canvas{display:block}
+  #simCanvas{border-radius:4px;background:#0b0e13;cursor:grab;touch-action:none}
+  #simCanvas.panning{cursor:grabbing}
+  .col{display:flex;flex-direction:column;gap:14px;flex:1;min-width:330px;max-width:470px}
+  .ctl{display:grid;grid-template-columns:96px 1fr 64px;gap:6px 10px;align-items:center}
+  .ctl label{color:var(--text-secondary);font-size:12px}
+  .ctl input[type=range]{width:100%;accent-color:var(--accent)}
+  .ctl input[type=number],.ctl select{width:100%;background:var(--surface-1);color:var(--text-primary);
+       border:1px solid var(--border);border-radius:5px;padding:3px 6px;font-size:12px}
+  .ctl .full{grid-column:2/4}
+  .note{color:var(--text-muted);font-size:11px}
+  .btnrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  button{background:var(--surface-1);color:var(--text-primary);border:1px solid var(--border);
+       border-radius:6px;padding:5px 10px;font-size:12.5px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.reset{background:var(--reset-bg);border-color:var(--reset-bd);color:var(--reset-fg)}
+  button.reset:hover{border-color:var(--reset-fg)}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .seg button{border:none;border-radius:0;padding:4px 10px;font-size:12px;background:transparent}
+  .seg button.on{background:var(--accent);color:#fff}
+  #segField{flex-wrap:wrap}
+  #segField button{padding:4px 7px;font-size:11px}
+  .presets button{font-size:11.5px;padding:3px 8px}
+  .stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-secondary)}
+  .stats b{color:var(--text-primary);font-weight:600;font-variant-numeric:tabular-nums}
+  .badge{font-size:10.5px;font-weight:700;letter-spacing:.04em;border-radius:4px;padding:1px 6px;display:none}
+  #bdgReplay{background:var(--series-4);color:#231a00}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin:2px 0 6px}
+  .legend .it{display:flex;align-items:center;gap:5px;color:var(--text-secondary)}
+  .chip{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .legend b{color:var(--text-primary);font-variant-numeric:tabular-nums;min-width:44px}
+  #chartBox{position:relative}
+  #tip{position:absolute;pointer-events:none;background:var(--surface-1);border:1px solid var(--border);
+       border-radius:6px;padding:5px 8px;font-size:11.5px;display:none;white-space:nowrap;z-index:3;
+       color:var(--text-secondary)}
+  #tip b{color:var(--text-primary)}
+  details{font-size:12.5px;color:var(--text-secondary)} summary{cursor:pointer;color:var(--text-primary)}
+  details ul{margin:6px 0;padding-left:18px} details li{margin:3px 0}
+  .hd{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--text-muted);
+      text-transform:uppercase;margin:0 0 8px}
+  .hd small{text-transform:none;letter-spacing:0;font-weight:400}
+  details.card{font-size:14px;color:var(--text-primary)}
+  summary.cardHd{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;margin:0}
+  summary.cardHd::-webkit-details-marker{display:none}
+  summary.cardHd::after{content:"▸";margin-left:auto;color:var(--text-muted);font-size:11px}
+  details[open]>summary.cardHd::after{content:"▾"}
+  details.card[open]>summary.cardHd{margin-bottom:8px}
+  .dragH{cursor:grab;color:var(--text-muted);user-select:none;font-size:13px}
+  details.card.dragging{opacity:0.45}
+  #hueLeg{display:none;align-items:center;gap:8px;font-size:11px;color:var(--text-muted);margin-top:8px}
+  #hueBar{height:10px;flex:1;border-radius:5px;border:1px solid var(--border)}
+  #dirLeg{display:flex;gap:10px;align-items:center;font-size:11px;color:var(--text-muted);margin-top:8px;flex-wrap:wrap}
+  #siteTip{position:absolute;display:none;background:var(--surface-1);border:1px solid var(--border);
+      border-radius:6px;padding:6px 8px;font-size:11.5px;color:var(--text-secondary);
+      pointer-events:none;z-index:4;white-space:nowrap}
+  #siteTip b{color:var(--text-primary)}
+  #siteTip canvas{display:block;margin:4px auto 0}
+  #replayRow{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:11.5px;color:var(--text-muted)}
+  #replayRow input[type=range]{flex:1;accent-color:var(--series-4)}
+  kbd{background:var(--surface-1);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:11px}
+  #stage{display:flex;flex-direction:column;gap:14px;flex:0 0 auto;max-width:686px}
+  .colSnaps{min-width:262px;max-width:340px}
+  #snapCard input[type=text],#snapCard textarea{width:100%;background:var(--surface-1);
+      color:var(--text-primary);border:1px solid var(--border);border-radius:5px;
+      padding:4px 6px;font-size:12px;font-family:inherit;resize:vertical}
+  #snapList{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  details.snap{background:var(--surface-1);border:1px solid var(--border);border-radius:6px;
+      padding:5px 8px;font-size:12px;color:var(--text-secondary)}
+  details.snap summary{display:flex;gap:6px;align-items:baseline;cursor:pointer;list-style:none;
+      color:var(--text-primary);min-width:0}
+  details.snap summary::-webkit-details-marker{display:none}
+  details.snap summary::before{content:"▸";color:var(--text-muted);font-size:10px}
+  details.snap[open] summary::before{content:"▾"}
+  details.snap summary b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .snapWhen{margin-left:auto;color:var(--text-muted);font-size:10.5px;white-space:nowrap}
+  .snapBody{margin-top:5px;display:flex;flex-direction:column;gap:5px}
+  .snapDesc{white-space:pre-wrap}
+  .snapParams{font-size:11px;color:var(--text-muted)}
+  details.snap .btnrow button{font-size:11px;padding:2px 7px}
+</style>
+</head>
+<body>
+<h1>LGCA Lab</h1>
+<p class="sub">Hexagonal lattice-gas cellular automaton — fermion &amp; boson, exact port of <code>lgca_clean-1.cpp</code> (same WELL1024a random stream). Runs entirely in this file.</p>
+
+<div class="wrap">
+  <div id="stage">
+  <div class="card" style="position:relative">
+    <canvas id="simCanvas"></canvas>
+    <div id="siteTip"></div>
+    <div id="replayRow">
+      <span id="bdgReplay" class="badge">REPLAY</span>
+      <span style="white-space:nowrap">replay<br><span id="lblBuf">0 ticks</span></span>
+      <input type="range" id="inReplay" min="0" max="1" step="0.02" value="1">
+      <button id="bLive" style="padding:2px 8px;font-size:11px">live</button>
+    </div>
+    <div class="stats">
+      <span>step <b id="stT">0</b></span>
+      <span>particles <b id="stN">0</b></span>
+      <span>occupied <b id="stOcc">0%</b></span>
+      <span>speed <b id="stSps">0</b> steps/s</span>
+      <span>zoom <b id="stZoom">1.0×</b></span>
+    </div>
+    <div id="hueLeg"><span id="hueL0">0°</span><div id="hueBar"></div><span id="hueL1">180°</span></div>
+    <div id="dirLeg"></div>
+    <div id="densityReadout" class="note" style="margin-top:8px"></div>
+    <div id="densityScale" class="note"></div>
+  </div>
+
+  <details class="card" id="notesCard">
+    <summary class="hd cardHd">what am I looking at? (fidelity notes)</summary>
+      <div style="font-size:12.5px;color:var(--text-secondary)">
+        <ul>
+          <li><b>The model.</b> Each lattice site has 6 channels, one per hexagonal direction. Every step: (1) <b>collision</b> — each site re-picks its channel occupations, conserving its particle count; (2) <b>streaming</b> — every particle hops exactly one site along its channel. There is no rest channel: everything moves at speed 1, every step.</li>
+          <li><b>Fermion</b>: at most one particle per channel; collision = 12 Metropolis permutation proposals, energy = sens × polar alignment with the 6 neighbours. <b>Boson</b>: unlimited occupancy; every particle re-draws its channel each step from a Boltzmann law built (by default) from the site's own nematic field.</li>
+          <li><b>Interpolated motion is not a fake.</b> Streaming is defined as "glide one lattice unit along the channel per time step". The glide you see is that exact world line, drawn at constant speed (never eased); direction changes happen exactly at node centres, where collision acts. No particle identity is invented: what is rendered each tick is the post-collision state (site, channel, count) — the model's literal variables. <b>Raw states</b> shows the same states as stroboscopic frames.</li>
+          <li><b>Physics toggles.</b> Defaults marked (C++) reproduce <code>lgca_clean-1.cpp</code> exactly. <i>kernel: average</i> divides the alignment field by the particle count that built it (removing the explicit crowd-size factor at fixed directional composition). The combined <i>average + neighbours + polar</i> settings reproduce the active boson collision rule in <code>lgca_noib.cpp</code>; they do not reproduce that older program's different RNG initialization. <i>power α</i> is a research extension: divide by M<sup>α</sup>, with exact sum at α=0 and average at α=1. The <i>neighbours only</i> field excludes the centre; <i>site + neighbours</i> includes all seven sites in both the field and the normalization count M. Any non-default toggle is a labelled departure from <code>lgca_clean-1.cpp</code>.</li>
+          <li><b>Random-stream equivalence.</b> Same seed + same settings uses the same WELL1024a draws and produces the same states as the corresponding C++ build (MODEL=FERMION or BOSON), verified state-for-state by <code>verify-parity.mjs</code>. Changing sensitivity/kernel mid-run keeps the stated transition rule but is a parameter-change experiment no single C++ run performs. Cross-platform caveat: browser and C++ <code>exp</code>/<code>log</code> libraries can differ in the last bit, so an exceptionally near-threshold random draw could make bitwise trajectories diverge even though the stochastic dynamics are the same.</li>
+          <li><b>Replay &amp; time travel.</b> The tool keeps the recent post-collision states in memory. The replay slider scrubs through them view-only (press <i>live</i> to snap back to the newest state). The transport buttons move the <i>actual</i> state: <b>−1</b>/<b>−N</b> restore the exact past lattice <i>and</i> the random-number generator, so stepping forward again reproduces the identical trajectory — unless you change a parameter after rewinding, which starts a deliberate counterfactual branch. <b>+N</b> computes ahead (committing first at the scrub position if you were replaying). Back-stepping is limited to the buffered window. Tip: <kbd>,</kbd> then <kbd>.</kbd> re-runs a single tick with its glide animated.</li>
+          <li><b>Order parameters</b> (all 0→1, computed exactly as in the C++; N = total particles, channel k has unit vector c<sub>k</sub> at angle θ<sub>k</sub> = 60°·k, n<sub>k</sub> = channel occupancy):
+            <ul>
+              <li><b>polar</b> = |Σ n<sub>k</sub>c<sub>k</sub>|/N over all sites and channels — the length of the average velocity vector. Opposite directions cancel; 1 ⇔ everyone moves the same way.</li>
+              <li><b>nematic</b> = |Σ n<sub>k</sub>(cos 2θ<sub>k</sub>, sin 2θ<sub>k</sub>)|/N — same sum with doubled angles, so θ and θ+180° add instead of cancelling: measures a shared <i>axis</i>. A perfect flock also scores 1 here.</li>
+              <li><b>spatial</b> = 1 − S/ln(W·H), where S = −Σ<sub>occupied sites</sub> p ln p and p = (site population)/N is the Shannon entropy of where particles sit. Even spread → S = ln(W·H) → 0; all particles on one site → 1.</li>
+              <li><b>band</b>: for each occupied site, sum the doubled-angle vectors of the populations on the 24 ring sites at hexagonal distances k = 1–4 along the 6 axial directions (direction of displacement, not velocity) — high when the mass around a site lies on one axis, i.e. stripes. Per-site scores are weighted by the site's own population and averaged over N. Kept arithmetically identical to the C++, including its quirks: channel 0 is excluded everywhere and the site weight counts channels 1–5 once per ring (×4).</li>
+            </ul></li>
+          <li><b>Keys</b>: <kbd>space</kbd> play/pause · <kbd>,</kbd> / <kbd>.</kbd> one step back / ahead (ahead animates the glide) · <kbd>[</kbd> / <kbd>]</kbd> jump −N / +N · <kbd>0</kbd> reset view.</li>
+          <li><b>Console API</b>: <code>runBatch({model,tsteps,iters,sens,dens,seed,W,H})</code> mirrors the C++ realization loop (one RNG stream) and prints the same output line; <code>dumpState({...})</code> emits the raw lattice for validation.</li>
+        </ul>
+      </div>
+  </details>
+  </div>
+
+  <div class="col">
+    <details class="card" open data-card="transport">
+      <summary class="hd cardHd"><span class="dragH" draggable="true" title="drag to reorder">⠿</span>transport</summary>
+      <div class="btnrow" style="margin-bottom:10px">
+        <button id="bPlay" class="primary">Pause</button>
+        <button id="bBack1" title="back one step (,) — restores the exact past state">−1</button>
+        <button id="bStep1" title="ahead one step, animated (.)">+1</button>
+        <button id="bBackN" title="go back N steps ([) — restores the exact past state">−N</button>
+        <input type="number" id="inJump" min="1" step="1" value="25" title="steps per ±N jump" style="width:64px;background:var(--surface-1);color:var(--text-primary);border:1px solid var(--border);border-radius:5px;padding:3px 6px;font-size:12px">
+        <button id="bFwdN" title="go ahead N steps (])">+N</button>
+        <button id="bReset" class="reset" title="restart from step 0 with the current settings">Reset</button>
+      </div>
+      <div class="ctl">
+        <label>speed</label>
+        <input type="range" id="inSpeed" min="0" max="12" step="1" value="4">
+        <span class="note" id="lblSpeed">2 /s</span>
+      </div>
+    </details>
+
+    <details class="card" open data-card="model">
+      <summary class="hd cardHd"><span class="dragH" draggable="true" title="drag to reorder">⠿</span>model &amp; physics</summary>
+      <div class="ctl">
+        <label>model</label>
+        <span class="seg full" id="segModel">
+          <button data-v="fermion">fermion</button>
+          <button data-v="boson" class="on">boson</button>
+        </span>
+        <label for="inSens">sensitivity</label>
+        <input type="range" id="inSens" min="0" max="32" step="0.05" value="2">
+        <input type="number" id="numSens" min="0" step="0.05" value="2">
+        <label for="inDens">density</label>
+        <input type="number" id="inDens" min="0" max="6" step="0.05" value="0.4">
+        <span class="note">per channel · on reset</span>
+        <label for="inSize">lattice</label>
+        <select id="inSize"><option>60</option><option>90</option><option selected>120</option><option>180</option><option>240</option><option>360</option></select>
+        <span class="note">on reset</span>
+        <label for="inSeed">seed</label>
+        <input type="number" id="inSeed" step="1" value="12345">
+        <button id="bDice" title="random seed" style="padding:2px 6px">🎲</button>
+        <label title="sum = exact lgca_clean-1.cpp; average = the normalized kernel commented out in lgca_noib.cpp (prob/=parts)">kernel</label>
+        <span class="seg full" id="segKernel">
+          <button data-v="sum" class="on">sum (C++)</button>
+          <button data-v="avg">average</button>
+          <button data-v="power">power α</button>
+        </span>
+        <span id="rowAlpha" style="display:none">
+          <label for="inAlpha">exponent α</label>
+          <input type="range" id="inAlpha" min="0" max="2" step="0.01" value="0.5">
+          <input type="number" id="numAlpha" aria-label="Alpha value" min="0" max="2" step="0.01" value="0.5">
+          <span></span><span class="btnrow full">
+            <button id="bAlphaDown" aria-label="Decrease alpha by 0.1">−0.1</button>
+            <button id="bAlphaUp" aria-label="Increase alpha by 0.1">+0.1</button>
+          </span>
+        </span>
+        <label></label><span class="full note" id="alphaNote">SUM · α = 0. Power divides the field by Mᵅ; M counts contributing particles.</span>
+        <label></label><span class="full note">For independent comparisons: choose settings, then Reset. Changing physics during play changes the experiment.</span>
+        <span id="rowBosonField" style="display:contents">
+          <label title="own site = reference C++; neighbours only = lgca_noib.cpp; site + neighbours = centre-inclusive research variant">field from</label>
+          <span class="seg full" id="segField">
+            <button data-v="site" class="on">own site (C++)</button>
+            <button data-v="neigh">neighbours only</button>
+            <button data-v="both" title="Central site plus six neighbours; M counts particles in all seven sites">site + neighbours</button>
+          </span>
+          <label title="nematic = exact lgca_clean-1.cpp (axis, J²); polar = direction (J), as in lgca_noib.cpp">alignment</label>
+          <span class="seg full" id="segAlign">
+            <button data-v="nematic" class="on">nematic (C++)</button>
+            <button data-v="polar">polar</button>
+          </span>
+        </span>
+      </div>
+      <details style="margin-top:12px">
+        <summary class="hd" style="margin:0;display:list-item">presets</summary>
+        <div class="btnrow presets" id="presetRow" style="margin-top:8px"></div>
+      </details>
+    </details>
+
+    <details class="card" open data-card="view">
+      <summary class="hd cardHd"><span class="dragH" draggable="true" title="drag to reorder">⠿</span>view</summary>
+      <div class="ctl">
+        <label>view</label>
+        <span class="seg full" id="segMode">
+          <button data-v="particles" class="on">particles</button>
+          <button data-v="density">density</button>
+          <button data-v="fields">other fields</button>
+        </span>
+        <span id="rowsParticles" style="display:contents">
+          <label>motion</label>
+          <span class="seg full" id="segMotion">
+            <button data-v="interp" class="on">interpolated</button>
+            <button data-v="raw">raw states</button>
+          </span>
+          <label>colour</label>
+          <span class="seg full" id="segPCol">
+            <button data-v="dir" class="on">direction</button>
+            <button data-v="uni">uniform</button>
+          </span>
+          <label>trails</label>
+          <span class="seg full" id="segTrail">
+            <button data-v="off" class="on">off</button>
+            <button data-v="short">short</button>
+            <button data-v="long">long</button>
+          </span>
+          <label></label>
+          <span class="full note"><label><input type="checkbox" id="inGuides" checked> lattice guides when zoomed</label></span>
+        </span>
+        <span id="rowsFields" style="display:none">
+          <label for="inView">colour by</label>
+          <select id="inView" class="full">
+            <option value="countlog">density (log · fixed count scale)</option>
+            <option value="dens" selected>density (dark → bright)</option>
+            <option value="classic">density (classic C++ blue)</option>
+            <option value="nem">alignment axis (hue = angle)</option>
+            <option value="dir">net motion (hue = direction)</option>
+          </select>
+          <label for="inRhoMax">colour ceiling</label>
+          <input type="number" id="inRhoMax" min="1" value="100" step="10">
+          <span class="note">particles/site · log view</span>
+          <label for="inOver">overlay</label>
+          <select id="inOver" class="full">
+            <option value="axis">bars: local alignment axis</option>
+            <option value="flux" selected>arrows: net motion</option>
+            <option value="none">none</option>
+          </select>
+          <label for="inBlock">overlay grain</label>
+          <select id="inBlock" class="full"><option>2</option><option selected>4</option><option>8</option></select>
+          <label for="inSmooth">render</label>
+          <select id="inSmooth" class="full"><option value="soft" selected>soft (pixel interpolation)</option><option value="crisp">crisp (raw sites)</option></select>
+        </span>
+        <label></label>
+        <span class="full btnrow"><button id="bView">reset view</button><span class="note">wheel = zoom · drag = pan · double-click = reset</span></span>
+      </div>
+    </details>
+
+    <details class="card" open data-card="chart">
+      <summary class="hd cardHd"><span class="dragH" draggable="true" title="drag to reorder">⠿</span>order parameters vs time</summary>
+      <div class="legend">
+        <span class="it"><span class="chip" style="background:var(--series-1)"></span>polar <b id="vPol">–</b></span>
+        <span class="it"><span class="chip" style="background:var(--series-2)"></span>nematic <b id="vNem">–</b></span>
+        <span class="it"><span class="chip" style="background:var(--series-3)"></span>spatial <b id="vSpa">–</b></span>
+        <span class="it"><span class="chip" style="background:var(--series-4)"></span>band <b id="vBan">–</b></span>
+      </div>
+      <div id="chartBox">
+        <canvas id="chartCanvas" width="420" height="186"></canvas>
+        <div id="tip"></div>
+      </div>
+      <div class="btnrow" style="margin:8px 0 0">
+        <button id="bCsv">copy data (CSV)</button>
+        <label class="note" style="align-self:center"><input type="checkbox" id="inBand" checked> compute band order (every 10 steps)</label>
+      </div>
+    </details>
+
+  </div>
+
+  <div class="col colSnaps">
+    <details class="card" open>
+      <summary class="hd cardHd">density snapshots</summary>
+      <p class="note">Capture the exact streamed state at the displayed integer step. Compare independent runs after Reset; snapshots remain here for this session.</p>
+      <button id="bCapture">capture density snapshot</button>
+      <div id="densitySnaps"></div>
+    </details>
+    <details class="card" open id="snapCard">
+      <summary class="hd cardHd">saved settings</summary>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <input type="text" id="snapName" placeholder="name" maxlength="60">
+        <textarea id="snapDesc" rows="2" placeholder="description"></textarea>
+        <div class="btnrow"><button id="bSnapSave" class="primary">save current settings</button></div>
+      </div>
+      <div id="snapList"></div>
+      <div class="btnrow" style="margin-top:10px">
+        <button id="bSnapExp">export .json</button>
+        <button id="bSnapImp">import .json</button>
+        <input type="file" id="snapFile" accept=".json,application/json" style="display:none">
+      </div>
+    </details>
+  </div>
+</div>
+
+<script id="engineSrc">
+"use strict";
+function makeWell(seed){
+  const S = new Uint32Array(32);
+  let s = seed >>> 0;
+  for(let j=0;j<32;j++){ S[j]=s; s=(Math.imul(s,1664525)+1013904223)>>>0; }
+  let si = 0;
+  const FACT = 2.32830643653869628906e-10;
+  const gen = function(){
+    const z0 = S[(si+31)&31];
+    const v0 = S[si], vm1 = S[(si+3)&31], vm2 = S[(si+24)&31], vm3 = S[(si+10)&31];
+    const z1 = (v0 ^ (vm1 ^ (vm1>>>8))) >>> 0;
+    const z2 = ((vm2 ^ ((vm2<<19)>>>0)) ^ (vm3 ^ ((vm3<<14)>>>0))) >>> 0;
+    S[si] = (z1 ^ z2) >>> 0;
+    S[(si+31)&31] = ((z0 ^ ((z0<<11)>>>0)) ^ (z1 ^ ((z1<<7)>>>0)) ^ (z2 ^ ((z2<<13)>>>0))) >>> 0;
+    si = (si+31)&31;
+    return S[si] * FACT;
+  };
+  gen.getState = function(){ const c=new Uint32Array(33); c.set(S); c[32]=si; return c; };
+  gen.setState = function(c){ S.set(c.subarray(0,32)); si=c[32]; };
+  return gen;
+}
+
+/* Channel geometry exactly as the C++ builds it (sqrt(3)/2 computed, not a literal,
+   so the J tables match the C++ doubles bit for bit). */
+const EH = Math.sqrt(3.0)/2.0;
+const CVEC = [[1.0,0.0],[0.5,EH],[-0.5,EH],[-1.0,0.0],[-0.5,-EH],[0.5,-EH]];
+const CX = CVEC.map(v=>v[0]), CY = CVEC.map(v=>v[1]);
+const JP = [], JN = [];
+for(let i=0;i<6;i++){
+  JP.push(new Float64Array(6)); JN.push(new Float64Array(6));
+  for(let j=0;j<6;j++){
+    const dot = CVEC[i][0]*CVEC[j][0] + CVEC[i][1]*CVEC[j][1];
+    JP[i][j] = dot; JN[i][j] = dot*dot;
+  }
+}
+const DST = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+const NB  = [[1,0],[0,1],[-1,0],[0,-1],[1,-1],[-1,1]];
+const METROPOLIS_STEPS = 12;
+
+class LGCA {
+  constructor(o){
+    this.model = o.model;
+    this.W = o.W; this.H = o.H;
+    this.dens = o.dens;
+    this.kernel = o.kernel || "sum";
+    this.alpha = Number.isFinite(o.alpha) ? o.alpha : 0;
+    if(this.alpha<0 || this.alpha>2) throw new RangeError("alpha must be in [0,2]");
+    this.bosonField = o.bosonField || "site";
+    this.bosonAlign = o.bosonAlign || "nematic";
+    this.initialSeed=o.seed;
+    this.rng = makeWell(o.seed);
+    const N6 = this.W*this.H*6;
+    /* C++ stores boson channel populations in int.  Int32Array preserves that
+       range; Uint16Array would silently wrap a clustered channel at 65,536. */
+    this.occ = new Int32Array(N6);
+    this.src = new Int32Array(N6);
+    this.tmp = new Int32Array(N6);
+    this.prob = new Float64Array(6);
+    this.m = new Float64Array(6);
+    this.h = new Float64Array(6);
+    this.cur = new Uint8Array(6);
+    this.tri = new Uint8Array(6);
+    this.perm = new Uint8Array(6);
+    this.initLattice();
+  }
+  /* Mirrors the C++ realization init exactly, including its RNG draw order:
+     one draw per (i,j,k) for the fractional fill, i outer, j inner, k innermost. */
+  initLattice(){
+    const {W,H,occ,rng} = this;
+    const base = Math.trunc(this.dens);
+    const frac = this.dens - base;
+    let n = base*6*W*H;
+    if(this.model==="boson") occ.fill(base); else occ.fill(0);
+    for(let i=0;i<W;i++)
+      for(let j=0;j<H;j++)
+        for(let k=0;k<6;k++)
+          if(rng()<frac){
+            const b=(j*W+i)*6+k;
+            if(this.model==="boson") occ[b]++; else occ[b]=1;
+            n++;
+          }
+    this.nuparts = n;
+    this.t = 0;
+    this.src.fill(0);
+  }
+  neighbourField(i,j){
+    const {W,H,occ,m} = this;
+    m.fill(0);
+    for(let d=0;d<6;d++){
+      const X=(i+NB[d][0]+W)%W, Y=(j+NB[d][1]+H)%H, bb=(Y*W+X)*6;
+      for(let k=0;k<6;k++) m[k]+=occ[bb+k];
+    }
+  }
+  collideFermion(i,j,sens){
+    const {occ,cur,tri,perm,m,h,rng} = this;
+    const b=(j*this.W+i)*6;
+    this.neighbourField(i,j);
+    for(let a=0;a<6;a++){
+      let s=0.0;
+      for(let k=0;k<6;k++) s += JP[a][k]*m[k];
+      h[a]=s;
+    }
+    if(this.kernel==="avg" || (this.kernel==="power" && this.alpha===1)){
+      let M=0; for(let k=0;k<6;k++) M+=m[k];
+      if(M!==0) for(let a=0;a<6;a++) h[a]/=M;
+    } else if(this.kernel==="power" && this.alpha!==0){
+      let M=0; for(let k=0;k<6;k++) M+=m[k];
+      if(M!==0){ const divisor=Math.pow(M,this.alpha); for(let a=0;a<6;a++) h[a]/=divisor; }
+    }
+    for(let k=0;k<6;k++) cur[k]=occ[b+k];
+    let s=0.0;
+    for(let k=0;k<6;k++) if(cur[k]) s+=h[k];
+    let E = sens*s;
+    for(let it=0;it<METROPOLIS_STEPS;it++){
+      for(let k=0;k<6;k++) perm[k]=k;
+      for(let k=5;k>0;k--){
+        const r = (rng()*(k+1))|0;
+        const tp=perm[k]; perm[k]=perm[r]; perm[r]=tp;
+      }
+      tri.fill(0);
+      for(let k=0;k<6;k++) if(cur[k]) tri[perm[k]]=1;
+      let s2=0.0;
+      for(let k=0;k<6;k++) if(tri[k]) s2+=h[k];
+      const E2 = sens*s2;
+      if(Math.log(rng()) < E2-E){ cur.set(tri); E=E2; }
+    }
+    const tb=b;
+    for(let k=0;k<6;k++) this.tmp[tb+k]=cur[k];
+  }
+  collideBoson(i,j,sens,n){
+    const {occ,prob,m,rng} = this;
+    const b=(j*this.W+i)*6;
+    const JT = this.bosonAlign==="nematic" ? JN : JP;
+    let srcArr, numparts;
+    if(this.bosonField==="site"){
+      srcArr = null; numparts = n;
+      for(let c=0;c<6;c++){
+        let s=0.0;
+        for(let k=0;k<6;k++) s += occ[b+k]*JT[k][c];
+        prob[c] = sens*s;
+      }
+    } else {
+      this.neighbourField(i,j);
+      if(this.bosonField==="both") for(let k=0;k<6;k++) m[k]+=occ[b+k];
+      numparts = 0; for(let k=0;k<6;k++) numparts += m[k];
+      for(let c=0;c<6;c++){
+        let s=0.0;
+        for(let k=0;k<6;k++) s += m[k]*JT[k][c];
+        prob[c] = sens*s;
+      }
+    }
+    let mx=prob[0];
+    for(let c=1;c<6;c++) if(prob[c]>mx) mx=prob[c];
+    let z=0.0;
+    if(this.kernel==="avg" || (this.kernel==="power" && this.alpha===1)){
+      for(let c=0;c<6;c++){ let v=prob[c]-mx; if(numparts!==0) v/=numparts; prob[c]=Math.exp(v); z+=prob[c]; }
+    } else if(this.kernel==="power" && this.alpha!==0){
+      const divisor=numparts===0?1:Math.pow(numparts,this.alpha);
+      for(let c=0;c<6;c++){ prob[c]=Math.exp((prob[c]-mx)/divisor); z+=prob[c]; }
+    } else {
+      for(let c=0;c<6;c++){ prob[c]=Math.exp(prob[c]-mx); z+=prob[c]; }
+    }
+    for(let c=0;c<6;c++) prob[c]/=z;
+    for(let c=1;c<6;c++) prob[c]+=prob[c-1];
+    const tb=b;
+    for(let p=0;p<n;p++){
+      const r=rng(); let c=5;
+      for(let q=0;q<6;q++) if(r<=prob[q]){ c=q; break; }
+      this.tmp[tb+c]++;
+    }
+  }
+  step(sens){
+    const {W,H,occ,tmp} = this;
+    tmp.fill(0);
+    if(this.model==="boson"){
+      for(let i=0;i<W;i++)
+        for(let j=0;j<H;j++){
+          const b=(j*W+i)*6;
+          const n=occ[b]+occ[b+1]+occ[b+2]+occ[b+3]+occ[b+4]+occ[b+5];
+          if(n!==0) this.collideBoson(i,j,sens,n);
+        }
+    } else {
+      for(let i=0;i<W;i++)
+        for(let j=0;j<H;j++){
+          const b=(j*W+i)*6;
+          const n=occ[b]+occ[b+1]+occ[b+2]+occ[b+3]+occ[b+4]+occ[b+5];
+          if(n!==0) this.collideFermion(i,j,sens);
+        }
+    }
+    this.src.set(tmp);
+    for(let i=0;i<W;i++)
+      for(let j=0;j<H;j++){
+        const b=(j*W+i)*6;
+        for(let k=0;k<6;k++){
+          const X=(i+DST[k][0]+W)%W, Y=(j+DST[k][1]+H)%H;
+          occ[(Y*W+X)*6+k]=tmp[b+k];
+        }
+      }
+    this.t++;
+  }
+  measure(){
+    const {W,H,occ,nuparts} = this;
+    let x1=0,y1=0,x2=0,y2=0,S=0,occup=0;
+    /* Keep i -> j -> channel accumulation order identical to C++.  The order
+       is immaterial mathematically, but not to last-bit floating-point output. */
+    for(let i=0;i<W;i++) for(let j=0;j<H;j++){
+      const b=(j*W+i)*6; let nl=0;
+      for(let k=0;k<6;k++){
+        const n=occ[b+k]; if(!n) continue;
+        nl+=n;
+        x1+=n*CX[k]; y1+=n*CY[k];
+        x2+=n*(2*CX[k]*CX[k]-1); y2+=n*(2*CX[k]*CY[k]);
+      }
+      if(nl===0) continue;
+      occup++;
+      const p=nl/nuparts; S+=p*Math.log(p);
+    }
+    return {
+      polar:Math.sqrt(x1*x1+y1*y1)/nuparts,
+      nematic:Math.sqrt(x2*x2+y2*y2)/nuparts,
+      entropy:-S,
+      spatial:1-(-S)/Math.log(W*H),
+      occFrac:occup/(W*H),
+      invOcc:occup>0?1/occup:0
+    };
+  }
+  band(){
+    const {W,H,occ,nuparts} = this;
+    let pre=0;
+    for(let i=0;i<W;i++) for(let j=0;j<H;j++){
+      const b=(j*W+i)*6;
+      let any=0; for(let k=0;k<6;k++) any+=occ[b+k];
+      if(!any) continue;
+      let x3=0,y3=0,nband=0,nsite=0;
+      for(let k=1;k<5;k++){
+        const idx=[[(i+k)%W,j],[(i+k)%W,(j-k+H)%H],[i,(j-k+H)%H],
+                   [(i-k+W)%W,j],[(i-k+W)%W,(j+k)%H],[i,(j+k)%H]];
+        for(let m=1;m<6;m++){
+          for(let d=0;d<6;d++){
+            const o=occ[(idx[d][1]*W+idx[d][0])*6+m];
+            x3+=o*(2*CX[d]*CX[d]-1); y3+=o*(2*CX[d]*CY[d]); nband+=o;
+          }
+          nsite+=occ[b+m];
+        }
+      }
+      if(nband>0) pre+=nsite*Math.sqrt(x3*x3+y3*y3)/(4*nband);
+    }
+    return pre/nuparts;
+  }
+}
+
+/* Mirrors the C++ program end to end: one RNG stream across realizations. */
+function runBatch(o){
+  const opt = Object.assign({model:"boson",tsteps:100,iters:1,sens:2,dens:0.4,seed:12345,W:120,H:120,kernel:"sum",bosonField:"site",bosonAlign:"nematic"},o);
+  const sim = new LGCA(opt);
+  const acc = {p:0,p2:0,n:0,n2:0,e:0,e2:0,b:0,b2:0,i:0,i2:0};
+  for(let r=0;r<opt.iters;r++){
+    if(r>0) sim.initLattice();
+    let m=null,bv=0;
+    for(let t=0;t<opt.tsteps;t++) sim.step(opt.sens);
+    m = sim.measure(); bv = sim.band();
+    acc.p+=m.polar; acc.p2+=m.polar*m.polar;
+    acc.n+=m.nematic; acc.n2+=m.nematic*m.nematic;
+    acc.e+=m.entropy; acc.e2+=m.entropy*m.entropy;
+    acc.b+=bv; acc.b2+=bv*bv;
+    acc.i+=m.invOcc; acc.i2+=m.invOcc*m.invOcc;
+  }
+  const I=opt.iters;
+  const se=(s,s2)=>{ const mean=s/I; return Math.sqrt(Math.abs(mean*mean-s2/I)/I); };
+  const logA=Math.log(opt.W*opt.H);
+  const line=[opt.sens*opt.dens, acc.p/I, se(acc.p,acc.p2), acc.n/I, se(acc.n,acc.n2),
+    1-(acc.e/I)/logA, se(acc.e,acc.e2)/logA, acc.b/I, se(acc.b,acc.b2), acc.i/I, se(acc.i,acc.i2)].join(" ");
+  console.log(line);
+  return {line, polar:acc.p/I, nematic:acc.n/I};
+}
+
+function dumpState(o){
+  const opt = Object.assign({model:"boson",tsteps:30,sens:2,dens:0.4,seed:424242,W:120,H:120,kernel:"sum",bosonField:"site",bosonAlign:"nematic"},o);
+  const sim = new LGCA(opt);
+  for(let t=0;t<opt.tsteps;t++) sim.step(opt.sens);
+  const out=["DUMP t="+sim.t+" N="+sim.nuparts];
+  for(let i=0;i<opt.W;i++)
+    for(let j=0;j<opt.H;j++)
+      for(let k=0;k<6;k++)
+        out.push(String(sim.occ[(j*opt.W+i)*6+k]));
+  return out.join("\n");
+}
+if(typeof window!=="undefined"){ window.runBatch=runBatch; window.dumpState=dumpState; }
+</script>
+
+<script>
+"use strict";
+/* ============================== UI =============================== */
+const $=id=>document.getElementById(id);
+const cvs=$("simCanvas"), ctx=cvs.getContext("2d");
+const ccv=$("chartCanvas"), cctx=cctx0();
+function cctx0(){ return $("chartCanvas").getContext("2d"); }
+const SPEEDS=[0.25,0.5,1,2,5,10,20,50,100,200,500,1000,Infinity];
+const CSSW=660;
+const DPR=Math.min(2,window.devicePixelRatio||1);
+const BG="#0b0e13";
+const DIRCOL=["#e5484d","#e0a336","#7fbf3f","#2bbfa3","#4f9de6","#b57bd6"].map(x=>x);
+const DIRARR=["→","↗","↖","←","↙","↘"];
+const UNICOL="#6ec8ff";
+
+const P={
+  model:"boson", sens:2.0, mode:"particles", motion:"interp",
+  pcol:"dir", trail:"off", kernel:"sum", alpha:0.5, bosonField:"site", bosonAlign:"nematic"
+};
+let sim=null, playing=true, phase=0, stepAnim=0;
+let hist={t:[],p:[],n:[],s:[],rho:[],cfg:[],bt:[],bv:[]};
+let lastFrame=performance.now(), spsMeter=0, spsCount=0, spsT0=performance.now();
+let view={x:0,y:0,zoom:1};
+let s0=5.5, cssH=572, worldW=660, worldH=572, shearX=0;
+let needTrailClear=true;
+
+/* replay ring buffer of post-collision states */
+let rb={slots:[],ticks:[],cap:0,len:0,head:0};
+let replay={on:false,T:0,k:-1,occR:null,streamedK:-1};
+
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function makeSim(){
+  const W=+$("inSize").value;
+  return new LGCA({model:P.model, W, H:W, dens:+$("inDens").value, seed:+$("inSeed").value,
+                   kernel:P.kernel, alpha:P.alpha, bosonField:P.bosonField, bosonAlign:P.bosonAlign});
+}
+function reset(){
+  /* density takes effect only here; keep typed values inside the C++ program's
+     documented domain (fermion needs 0 <= dens < 1). */
+  { const dv=+$("inDens").value;
+    if(!(dv>=0)) $("inDens").value=0;
+    else if(P.model==="fermion"&&dv>=1) $("inDens").value=0.95; }
+  sim=makeSim();
+  sim._dens=+$("inDens").value;
+  hist={t:[],p:[],n:[],s:[],rho:[],cfg:[],bt:[],bv:[]};
+  record();
+  sim.step(P.sens); record();
+  phase=0;
+  sizeCanvas();
+  const cap=Math.min(300,Math.max(20,Math.floor(24e6/(sim.W*sim.H*6*4))));
+  rb={slots:new Array(cap),rng:new Array(cap),ticks:new Int32Array(cap),cap,len:0,head:0};
+  pushReplay();
+  exitReplay();
+  updateBufLabel();
+  needTrailClear=true;
+  drawChart();
+}
+function pushReplay(){
+  const i=rb.head;
+  if(!rb.slots[i]) rb.slots[i]=new Int32Array(sim.W*sim.H*6);
+  rb.slots[i].set(sim.src);
+  if(!rb.rng[i]) rb.rng[i]=new Uint32Array(33);
+  rb.rng[i].set(sim.rng.getState());
+  rb.ticks[i]=sim.t;
+  rb.head=(rb.head+1)%rb.cap;
+  if(rb.len<rb.cap) rb.len++;
+}
+function replayRngSlot(tick){
+  for(let q=0;q<rb.len;q++){
+    const i=(rb.head-1-q+rb.cap*2)%rb.cap;
+    if(rb.ticks[i]===tick) return rb.rng[i];
+  }
+  return null;
+}
+/* True rewind: restore lattice AND generator state to buffered tick k, truncating
+   history beyond it. Deterministic: stepping forward again reproduces the same
+   trajectory unless a parameter is changed after rewinding (a deliberate branch). */
+function jumpTo(k){
+  const [a,b]=replayRange();
+  k=Math.max(a,Math.min(b,k));
+  if(k===sim.t){ exitReplay(); phase=1; return; }
+  const buf=replaySlot(k), rs=replayRngSlot(k);
+  if(!buf||!rs){ exitReplay(); return; }
+  const {W,H}=sim;
+  for(let i=0;i<W;i++) for(let j=0;j<H;j++){
+    const bb=(j*W+i)*6;
+    for(let c=0;c<6;c++){
+      const X=(i+DST[c][0]+W)%W, Y=(j+DST[c][1]+H)%H;
+      sim.occ[(Y*W+X)*6+c]=buf[bb+c];
+    }
+  }
+  sim.src.set(buf);
+  sim.rng.setState(rs);
+  sim.t=k;
+  let hlen=hist.t.length; while(hlen>0&&hist.t[hlen-1]>k) hlen--;
+  hist.t.length=hlen; hist.p.length=hlen; hist.n.length=hlen; hist.s.length=hlen; hist.rho.length=hlen; hist.cfg.length=hlen;
+  let blen=hist.bt.length; while(blen>0&&hist.bt[blen-1]>k) blen--;
+  hist.bt.length=blen; hist.bv.length=blen;
+  const newest=rb.ticks[(rb.head-1+rb.cap)%rb.cap];
+  const drop=newest-k;
+  if(drop>0){ rb.head=(rb.head-drop+rb.cap)%rb.cap; rb.len-=drop; }
+  sim._m=sim.measure();
+  if(blen>0) sim._b=hist.bv[blen-1];
+  exitReplay(); phase=1;
+  updateBufLabel(); needTrailClear=true; drawChart();
+}
+let bufFlashT=null;
+function flashBufLimit(){
+  $("lblBuf").textContent="at history limit";
+  clearTimeout(bufFlashT);
+  bufFlashT=setTimeout(updateBufLabel,1400);
+}
+function back(n){
+  playing=false; $("bPlay").textContent="Play";
+  const [a]=replayRange();
+  const cur=replay.on?replay.k:sim.t;
+  let target=cur-n;
+  const clamped=target<a;
+  if(clamped) target=a;
+  jumpTo(target);
+  if(clamped) flashBufLimit();
+}
+function fwdN(n){
+  if(replay.on) jumpTo(replay.k);
+  doSteps(n); phase=1;
+}
+function replaySlot(tick){
+  for(let q=0;q<rb.len;q++){
+    const i=(rb.head-1-q+rb.cap*2)%rb.cap;
+    if(rb.ticks[i]===tick) return rb.slots[i];
+  }
+  return null;
+}
+function replayRange(){
+  if(rb.len===0) return [sim.t,sim.t];
+  const newest=rb.ticks[(rb.head-1+rb.cap)%rb.cap];
+  const oldest=rb.ticks[(rb.head-rb.len+rb.cap*2)%rb.cap];
+  return [oldest,newest];
+}
+function updateBufLabel(){
+  const [a,b]=replayRange();
+  $("lblBuf").textContent=(b-a)+" ticks";
+  const r=$("inReplay"); r.min=a; r.max=b; if(!replay.on) r.value=b;
+}
+function enterReplay(v){
+  replay.on=true; playing=false; $("bPlay").textContent="Play";
+  $("bdgReplay").style.display="inline-block";
+  setReplayT(v);
+}
+function exitReplay(){
+  replay.on=false; replay.k=-1; replay.streamedK=-1;
+  $("bdgReplay").style.display="none";
+  const [,b]=replayRange(); $("inReplay").value=b;
+  needTrailClear=true;
+}
+function setReplayT(v){
+  const [a,b]=replayRange();
+  replay.T=Math.min(b,Math.max(a,v));
+  $("inReplay").value=replay.T;
+  let k=Math.ceil(replay.T); if(k<=a) k=a===0?Math.max(1,a):a; if(k>b) k=b;
+  replay.k=k;
+  replay.f=Math.min(1,Math.max(0,replay.T-(k-1)));
+}
+function replayStreamed(){
+  if(replay.streamedK===replay.k && replay.occR) return replay.occR;
+  const buf=replaySlot(replay.k);
+  if(!buf) return sim.occ;
+  if(!replay.occR||replay.occR.length!==buf.length) replay.occR=new Int32Array(buf.length);
+  const {W,H}=sim, o=replay.occR;
+  o.fill(0);
+  for(let i=0;i<W;i++) for(let j=0;j<H;j++){
+    const b=(j*W+i)*6;
+    for(let k=0;k<6;k++){
+      const X=(i+DST[k][0]+W)%W, Y=(j+DST[k][1]+H)%H;
+      o[(Y*W+X)*6+k]=buf[b+k];
+    }
+  }
+  replay.streamedK=replay.k;
+  return o;
+}
+
+function sizeCanvas(){
+  const W=sim.W,H=sim.H;
+  s0=CSSW/W;
+  worldW=CSSW; worldH=H*Math.sqrt(3)/2*s0; shearX=H*0.5*s0;
+  cssH=Math.round(worldH);
+  cvs.style.width=CSSW+"px"; cvs.style.height=cssH+"px";
+  cvs.width=Math.round(CSSW*DPR); cvs.height=Math.round(cssH*DPR);
+  off.width=2*W; off.height=2*H;
+  offCtx=off.getContext("2d");
+  offImg=offCtx.createImageData(2*W,2*H);
+  offU32=new Uint32Array(offImg.data.buffer);
+  view={x:0,y:0,zoom:1};
+  $("stZoom").textContent="1.0×";
+}
+function record(){
+  const m=sim.measure();
+  hist.t.push(sim.t); hist.p.push(m.polar); hist.n.push(m.nematic); hist.s.push(m.spatial);
+  sim._m=m;
+  hist.rho.push(densityStats(sim.occ));
+  hist.cfg.push({sens:P.sens,alpha:P.kernel==="sum"?0:P.kernel==="avg"?1:P.alpha,kernel:P.kernel,field:sim.model==="fermion"?"neigh":P.bosonField,alignment:sim.model==="fermion"?"polar":P.bosonAlign});
+  if($("inBand").checked && (sim.t%10===0)){ const bv=sim.band(); hist.bt.push(sim.t); hist.bv.push(bv); sim._b=bv; }
+  if(hist.t.length>240000){ for(const k of["t","p","n","s","rho","cfg"]) hist[k]=hist[k].filter((_,q)=>q%2===0); }
+}
+function doSteps(n){
+  for(let q=0;q<n;q++){ sim.step(P.sens); record(); pushReplay(); }
+  spsCount+=n;
+  updateBufLabel();
+}
+
+/* ---------------- field rendering (offscreen image) ---------------- */
+const off=document.createElement("canvas");
+let offCtx=null, offImg=null, offU32=null;
+const DLUT=(()=>{
+  const stops=[[8,12,28],[22,48,94],[42,120,214],[125,184,240],[255,255,255]];
+  const L=new Uint32Array(256);
+  for(let q=0;q<256;q++){
+    const t=q/255*(stops.length-1), a=Math.min(stops.length-2,Math.floor(t)), f=t-a;
+    const r=(stops[a][0]+(stops[a+1][0]-stops[a][0])*f)|0;
+    const g=(stops[a][1]+(stops[a+1][1]-stops[a][1])*f)|0;
+    const b=(stops[a][2]+(stops[a+1][2]-stops[a][2])*f)|0;
+    L[q]=(0xFF000000|(b<<16)|(g<<8)|r)>>>0;
+  }
+  return L;
+})();
+function hsl2u32(h,s,l){
+  h=(((h%360)+360)%360)/360;
+  const q=l<0.5?l*(1+s):l+s-l*s, p=2*l-q;
+  const f=t=>{ t=((t%1)+1)%1; if(t<1/6)return p+(q-p)*6*t; if(t<0.5)return q;
+               if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; };
+  const r=(f(h+1/3)*255)|0, g=(f(h)*255)|0, b=(f(h-1/3)*255)|0;
+  return (0xFF000000|(b<<16)|(g<<8)|r)>>>0;
+}
+const BG_U32=0xFF130E0B;
+function buildFieldImage(arr){
+  const {W,H}=sim, mode=$("inView").value, dens=sim._dens||0.4;
+  const W2=2*W;
+  offU32.fill(BG_U32);
+  for(let j=0;j<H;j++){
+    for(let i=0;i<W;i++){
+      const b=(j*W+i)*6;
+      const n0=arr[b],n1=arr[b+1],n2=arr[b+2],n3=arr[b+3],n4=arr[b+4],n5=arr[b+5];
+      const n=n0+n1+n2+n3+n4+n5;
+      if(!n) continue;
+      let col;
+      if(mode==="countlog"){
+        col=DLUT[Math.min(255,Math.floor(255*Math.log1p(n)/Math.log1p(Math.max(1,+$("inRhoMax").value||100))))];
+      } else if(mode==="dens"){
+        col=DLUT[Math.min(255,(Math.sqrt(n/(24*dens))*255)|0)];
+      } else if(mode==="classic"){
+        const br=n/(6*dens)*100+155;
+        const rr=br>510?255:(br/2)|0, bl=br>255?255:br|0;
+        col=(0xFF000000|(bl<<16)|(rr<<8)|rr)>>>0;
+      } else if(mode==="dir"){
+        const fx=n0-n3+0.5*(n1-n2-n4+n5), fy=0.8660254*(n1+n2-n4-n5);
+        const m=Math.hypot(fx,fy)/n;
+        col=hsl2u32(Math.atan2(fy,fx)*57.29578, 0.15+0.75*m, 0.28+0.37*m);
+      } else {
+        let qx=0,qy=0;
+        const ns=[n0,n1,n2,n3,n4,n5];
+        for(let k=0;k<6;k++){ qx+=ns[k]*(2*CX[k]*CX[k]-1); qy+=ns[k]*2*CX[k]*CY[k]; }
+        const m=Math.hypot(qx,qy)/n, a=Math.atan2(qy,qx)/2;
+        col=hsl2u32(a*114.59156+180, 0.15+0.8*m, 0.28+0.37*m);
+      }
+      const x=(2*i+j)%W2, y0=2*j*W2, y1=y0+W2, x1=(x+1)%W2;
+      offU32[y0+x]=col; offU32[y0+x1]=col; offU32[y1+x]=col; offU32[y1+x1]=col;
+    }
+  }
+  offCtx.putImageData(offImg,0,0);
+}
+function drawFields(arr){
+  buildFieldImage(arr);
+  ctx.fillStyle=BG; ctx.fillRect(0,0,CSSW,cssH);
+  ctx.imageSmoothingEnabled=($("inSmooth").value==="soft");
+  const z=view.zoom;
+  const n0=Math.floor(view.y/worldH), n1=Math.floor((view.y+cssH/z)/worldH);
+  for(let n=n0;n<=n1;n++){
+    const oy=n*worldH, ox0=n*shearX;
+    const m0=Math.floor((view.x-ox0)/worldW), m1=Math.floor((view.x-ox0+CSSW/z)/worldW);
+    for(let m=m0;m<=m1;m++){
+      const wx=ox0+m*worldW;
+      ctx.drawImage(off,0,0,off.width,off.height,
+        (wx-view.x)*z,(oy-view.y)*z, worldW*z, worldH*z);
+    }
+  }
+  const over=$("inOver").value;
+  if(over!=="none") drawOverlay(over,arr);
+}
+function drawOverlay(kind,arr){
+  const {W,H}=sim, bsz=+$("inBlock").value;
+  const z=view.zoom;
+  ctx.lineCap="round";
+  const n0=Math.floor(view.y/worldH), n1=Math.floor((view.y+cssH/z)/worldH);
+  for(let J=0;J<H;J+=bsz) for(let I=0;I<W;I+=bsz){
+    let fx=0,fy=0,qx=0,qy=0,n=0;
+    for(let j=J;j<Math.min(J+bsz,H);j++) for(let i=I;i<Math.min(I+bsz,W);i++){
+      const b=(j*W+i)*6;
+      for(let k=0;k<6;k++){ const o=arr[b+k]; if(!o) continue;
+        n+=o; fx+=o*CX[k]; fy+=o*CY[k];
+        qx+=o*(2*CX[k]*CX[k]-1); qy+=o*2*CX[k]*CY[k]; }
+    }
+    if(!n) continue;
+    const jm=J+bsz/2, im=I+bsz/2;
+    const bwx=(((im+jm*0.5)%W)+W)%W*s0, bwy=jm*Math.sqrt(3)/2*s0;
+    let dx,dy,alpha,head=false;
+    if(kind==="flux"){
+      const m=Math.hypot(fx,fy)/n;
+      if(m<0.15) continue;
+      alpha=Math.min(1,(m-0.15)/0.45);
+      const mm=Math.hypot(fx,fy), L=s0*bsz*0.45*(0.4+0.6*Math.min(1,m/0.6));
+      dx=fx/mm*L; dy=-fy/mm*L; head=true;
+    } else {
+      const m=Math.hypot(qx,qy)/n;
+      if(m<0.06) continue;
+      alpha=Math.min(1,(m-0.06)/0.4);
+      const a=Math.atan2(qy,qx)/2, L=s0*bsz*0.5*(0.3+0.7*Math.min(1,m/0.6));
+      dx=Math.cos(a)*L; dy=-Math.sin(a)*L;
+    }
+    for(let n2=n0;n2<=n1;n2++){
+      const oy=n2*worldH, ox0=n2*shearX;
+      const m0=Math.floor((view.x-ox0)/worldW), m1=Math.floor((view.x-ox0+CSSW/z)/worldW);
+      for(let mm2=m0;mm2<=m1;mm2++){
+        const px=(ox0+mm2*worldW+bwx-view.x)*z, py=(oy+bwy-view.y)*z;
+        if(px<-40||px>CSSW+40||py<-40||py>cssH+40) continue;
+        for(const [w,col] of [[3.2,`rgba(5,8,15,${0.7*alpha})`],[1.5,`rgba(255,255,255,${alpha})`]]){
+          ctx.strokeStyle=col; ctx.lineWidth=w;
+          ctx.beginPath();
+          ctx.moveTo(px-(head?0:dx*z),py-(head?0:dy*z)); ctx.lineTo(px+dx*z,py+dy*z);
+          if(head){ const a2=Math.atan2(dy,dx);
+            ctx.moveTo(px+dx*z,py+dy*z); ctx.lineTo(px+dx*z-6*Math.cos(a2-0.5),py+dy*z-6*Math.sin(a2-0.5));
+            ctx.moveTo(px+dx*z,py+dy*z); ctx.lineTo(px+dx*z-6*Math.cos(a2+0.5),py+dy*z-6*Math.sin(a2+0.5)); }
+          ctx.stroke();
+        }
+      }
+    }
+  }
+}
+
+/* ---------------- particle rendering ---------------- */
+function drawParticles(arr,f,isRaw){
+  const {W,H}=sim;
+  const z=view.zoom, cellpx=s0*z;
+  const H3=Math.sqrt(3)/2;
+  const trails=P.trail!=="off";
+  if(trails&&!needTrailClear){
+    ctx.fillStyle=P.trail==="short"?"rgba(11,14,19,0.30)":"rgba(11,14,19,0.10)";
+    ctx.fillRect(0,0,CSSW,cssH);
+  } else {
+    ctx.fillStyle=BG; ctx.fillRect(0,0,CSSW,cssH);
+    needTrailClear=false;
+  }
+  const j0=Math.floor(view.y/(H3*s0))-1, j1=Math.floor((view.y+cssH/z)/(H3*s0))+1;
+  if($("inGuides").checked && cellpx>=15 && !trails) drawGuides(j0,j1,z,H3);
+  const paths=[];
+  const ncol=P.pcol==="dir"?6:1;
+  for(let c=0;c<ncol;c++) paths.push(new Path2D());
+  const rBase=Math.max(1,0.21*cellpx);
+  const useRect=rBase<1.2;
+  const vx0=view.x, vx1=view.x+CSSW/z;
+  for(let jj=j0;jj<=j1;jj++){
+    const jw=((jj%H)+H)%H;
+    const rowy=(jj+0.5)*H3*s0;
+    for(let ii=0;ii<W;ii++){
+      const b=(jw*W+ii)*6;
+      const bwx=((((ii+jj*0.5)%W)+W)%W+0.5)*s0;
+      for(let k=0;k<6;k++){
+        const n=arr[b+k]; if(!n) continue;
+        let wx=bwx, wy=rowy;
+        if(isRaw){ wx+=0.26*s0*CX[k]; wy-=0.26*s0*CY[k]; }
+        else { wx+=f*s0*CX[k]; wy-=f*s0*CY[k]; }
+        const r=P.model==="boson"?Math.min(0.46*cellpx,rBase*Math.sqrt(n)):rBase;
+        const pth=paths[ncol===1?0:k];
+        for(let mshift=-1;mshift<=1;mshift++){
+          const x=wx+mshift*worldW;
+          if(x<vx0-2*s0||x>vx1+2*s0) continue;
+          const sx=(x-view.x)*z, sy=(wy-view.y)*z;
+          if(sy<-8||sy>cssH+8) continue;
+          if(useRect) pth.rect(sx-r,sy-r,2*r,2*r);
+          else { pth.moveTo(sx+r,sy); pth.arc(sx,sy,r,0,6.2832); }
+        }
+      }
+    }
+  }
+  if(ncol===1){ ctx.fillStyle=UNICOL; ctx.fill(paths[0]); }
+  else for(let k=0;k<6;k++){ ctx.fillStyle=DIRCOL[k]; ctx.fill(paths[k]); }
+  if(cellpx>=34 && P.model==="boson") drawCounts(arr,f,isRaw,j0,j1,z,H3);
+}
+function drawGuides(j0,j1,z,H3){
+  const {W,H}=sim;
+  ctx.strokeStyle="rgba(255,255,255,0.07)";
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  const maxd=1.6*s0*z;
+  for(let jj=j0;jj<=j1;jj++){
+    const rowy=(jj+0.5)*H3*s0;
+    for(let ii=0;ii<W;ii++){
+      const bwx=((((ii+jj*0.5)%W)+W)%W+0.5)*s0;
+      const sx=(bwx-view.x)*z, sy=(rowy-view.y)*z;
+      if(sx<-40||sx>CSSW+40||sy<-40||sy>cssH+40) continue;
+      for(const k of [0,1,2]){
+        const wx2=bwx+s0*CX[k], wy2=rowy-s0*CY[k];
+        const sx2=(wx2-view.x)*z, sy2=(wy2-view.y)*z;
+        if(Math.abs(sx2-sx)>maxd) continue;
+        ctx.moveTo(sx,sy); ctx.lineTo(sx2,sy2);
+      }
+    }
+  }
+  ctx.stroke();
+  ctx.fillStyle="rgba(255,255,255,0.10)";
+  for(let jj=j0;jj<=j1;jj++){
+    const rowy=(jj+0.5)*H3*s0;
+    for(let ii=0;ii<W;ii++){
+      const bwx=((((ii+jj*0.5)%W)+W)%W+0.5)*s0;
+      const sx=(bwx-view.x)*z, sy=(rowy-view.y)*z;
+      if(sx<-10||sx>CSSW+10||sy<-10||sy>cssH+10) continue;
+      ctx.fillRect(sx-1,sy-1,2,2);
+    }
+  }
+}
+function drawCounts(arr,f,isRaw,j0,j1,z,H3){
+  const {W,H}=sim;
+  ctx.font="10px sans-serif"; ctx.fillStyle="rgba(255,255,255,0.9)";
+  ctx.textAlign="center";
+  for(let jj=j0;jj<=j1;jj++){
+    const jw=((jj%H)+H)%H;
+    const rowy=(jj+0.5)*H3*s0;
+    for(let ii=0;ii<W;ii++){
+      const b=(jw*W+ii)*6;
+      const bwx=((((ii+jj*0.5)%W)+W)%W+0.5)*s0;
+      for(let k=0;k<6;k++){
+        const n=arr[b+k]; if(n<2) continue;
+        let wx=bwx,wy=rowy;
+        if(isRaw){ wx+=0.26*s0*CX[k]; wy-=0.26*s0*CY[k]; }
+        else { wx+=f*s0*CX[k]; wy-=f*s0*CY[k]; }
+        const sx=(wx-view.x)*z, sy=(wy-view.y)*z;
+        if(sx<-10||sx>CSSW+10||sy<-10||sy>cssH+10) continue;
+        ctx.fillText(n,sx,sy-Math.max(3,0.24*s0*z));
+      }
+    }
+  }
+}
+
+/* ---------------- main draw ---------------- */
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  let arr, f, isRaw=false;
+  if(replay.on){
+    if(P.mode!=="particles"){ arr=replayStreamed(); }
+    else { arr=replaySlot(replay.k)||sim.src; f=replay.f; }
+  } else if(P.mode!=="particles"){
+    arr=sim.occ;
+  } else if(P.motion==="raw"){
+    arr=sim.occ; isRaw=true;
+  } else {
+    arr=sim.src; f=Math.min(1,phase);
+  }
+  if(P.mode!=="particles") drawFields(arr);
+  else drawParticles(arr,f||0,isRaw);
+}
+
+/* Density diagnostics are display-only and consume no random draws. */
+let densityCache={};
+function densityStats(arr){
+  let N=0,max=0,maxChannel=0,sum2=0,occupied=0;
+  for(let b=0;b<arr.length;b+=6){
+    let n=0; for(let k=0;k<6;k++){ n+=arr[b+k]; maxChannel=Math.max(maxChannel,arr[b+k]); }
+    N+=n; max=Math.max(max,n); sum2+=n*n; if(n) occupied++;
+  }
+  return {N,max,maxChannel,occupied,mean:N/(arr.length/6),fraction:N?max/N:0,effectiveArea:sum2?N*N/sum2:0};
+}
+function updateDensityReadout(){
+  const tick=replay.on?replay.k:sim.t, arr=replay.on?replayStreamed():sim.occ;
+  if(densityCache.arr!==arr || densityCache.tick!==tick){ densityCache={arr,tick,m:densityStats(arr)}; }
+  const m=densityCache.m;
+  $("densityReadout").textContent=`Streamed t=${tick} · mean ${m.mean.toFixed(3)} particles/site · peak ${m.max} · peak / N ${(100*m.fraction).toFixed(2)}% · effective occupied area ${m.effectiveArea.toFixed(1)} sites`;
+  const log=P.mode!=="particles" && $("inView").value==="countlog";
+  $("densityScale").textContent=log?`Log colour scale: 0 → ${Math.max(1,+$("inRhoMax").value||100)} particles/site (white at or above ceiling). Colour saturation is not a density plateau.`:"Density readout uses exact site counts; soft rendering only interpolates pixels.";
+}
+$("bCapture").addEventListener("click",()=>{
+  playing=false; $("bPlay").textContent="Play";
+  const arr=new Int32Array(replay.on?replayStreamed():sim.occ), tick=replay.on?replay.k:sim.t;
+  const capturedRng=Array.from(replay.on?replayRngSlot(tick):sim.rng.getState());
+  const old=$("inView").value; $("inView").value="countlog"; buildFieldImage(arr); $("inView").value=old;
+  const m=densityStats(arr), settings={...currentSettings(),size:sim.W,dens:sim.dens,seed:sim.initialSeed};
+  const label=snapParamLine(settings), ceiling=Math.max(1,+$("inRhoMax").value||100);
+  const out=document.createElement("canvas"); out.width=720; out.height=710;
+  const c=out.getContext("2d"); c.fillStyle=BG; c.fillRect(0,0,720,710);
+  c.imageSmoothingEnabled=false; c.drawImage(off,0,0,720,624);
+  c.fillStyle="#fff"; c.font="12px sans-serif"; c.fillText(label,12,645);
+  c.fillText(`t=${tick} · N=${m.N} · peak=${m.max} · peak/N=${(100*m.fraction).toFixed(2)}%`,12,665);
+  c.fillText(`Log colour: 0–${ceiling} particles/site · exact streamed state · current physics settings`,12,685);
+  const url=out.toDataURL("image/png"), box=document.createElement("div"); box.style.marginTop="12px";
+  const img=document.createElement("img"); img.src=url; img.alt=label+` at t=${tick}`; img.style.width="100%";
+  const a=document.createElement("a"); a.href=url; a.download=`lgca-density-alpha${settings.kernel==="power"?settings.alpha:settings.kernel==="avg"?1:0}-t${tick}.png`; a.textContent="save PNG";
+  const b=document.createElement("button"); b.textContent="save state + metadata";
+  b.addEventListener("click",()=>{
+    const blob=new Blob([JSON.stringify({settings,t:tick,stage:"after streaming",rng:capturedRng,colour:{mapping:"log1p",ceiling},metrics:m,occupancy:Array.from(arr),note:"Settings are current; a mid-run physics change is not a fresh fixed-parameter run."})],{type:"application/json"});
+    const d=document.createElement("a"); d.href=URL.createObjectURL(blob); d.download=`lgca-state-t${tick}.json`; d.click(); setTimeout(()=>URL.revokeObjectURL(d.href),5000);
+  });
+  box.append(img,a,document.createTextNode(" "),b); $("densitySnaps").prepend(box);
+});
+
+/* ---------------- chart ---------------- */
+const CH={padL:32,padR:10,padT:6,padB:30};
+/* 1-2-5 tick spacing, the usual choice for a readable linear axis */
+function niceStep(raw){
+  const mag=Math.pow(10,Math.floor(Math.log10(raw))), n=raw/mag;
+  return (n<=1?1:n<=2?2:n<=5?5:10)*mag;
+}
+const fmtTick=v=> v>=1e6?(v/1e6).toFixed(v%1e6?1:0)+"M"
+               : v>=1e4?(v/1e3).toFixed(v%1e3?1:0)+"k" : String(v);
+function drawChart(){
+  const w=ccv.width=ccv.clientWidth||420, h=ccv.height=186;
+  cctx.clearRect(0,0,w,h);
+  const {padL,padR,padT,padB}=CH, iw=w-padL-padR, ih=h-padT-padB;
+  const grid=css("--grid"), muted=css("--text-muted");
+  cctx.font="10px sans-serif"; cctx.lineWidth=1;
+  /* horizontal: minor every 0.05, major every 0.25 (labelled) */
+  cctx.strokeStyle=grid; cctx.globalAlpha=0.55; cctx.beginPath();
+  for(let q=1;q<20;q++){
+    if(q%5===0) continue;
+    const y=Math.round(padT+ih*(1-q/20))+0.5;
+    cctx.moveTo(padL,y); cctx.lineTo(w-padR,y);
+  }
+  cctx.stroke(); cctx.globalAlpha=1;
+  cctx.beginPath(); cctx.fillStyle=muted; cctx.textAlign="right";
+  for(let q=0;q<=4;q++){
+    const v=q/4, y=Math.round(padT+ih*(1-v))+0.5;
+    cctx.moveTo(padL,y); cctx.lineTo(w-padR,y);
+    cctx.fillText(String(v),padL-5,y+3);
+  }
+  cctx.stroke();
+  const N=hist.t.length;
+  const t1=N?hist.t[N-1]:0, t0=N?hist.t[0]:0, span=Math.max(1,t1-t0);
+  const X=t=>padL+iw*(t-t0)/span, Y=v=>padT+ih*(1-Math.min(1,v));
+  /* vertical: nice-number majors, minors only when they stay legible */
+  if(N>1){
+    const majT=Math.max(1,niceStep(span/Math.max(2,Math.min(8,Math.floor(iw/58)))));
+    const magT=Math.pow(10,Math.floor(Math.log10(majT)));
+    const minT=majT/(Math.round(majT/magT)===2?4:5);
+    if(minT>=1 && iw*minT/span>=4){
+      cctx.strokeStyle=grid; cctx.globalAlpha=0.55; cctx.beginPath();
+      for(let t=Math.ceil(t0/minT)*minT;t<=t1;t+=minT){
+        if(t%majT===0) continue;
+        const x=Math.round(X(t))+0.5;
+        cctx.moveTo(x,padT); cctx.lineTo(x,padT+ih);
+      }
+      cctx.stroke(); cctx.globalAlpha=1;
+    }
+    cctx.strokeStyle=grid; cctx.textAlign="center"; cctx.beginPath();
+    for(let t=Math.ceil(t0/majT)*majT;t<=t1;t+=majT){
+      const x=Math.round(X(t))+0.5;
+      cctx.moveTo(x,padT); cctx.lineTo(x,padT+ih);
+      const txt=fmtTick(t), hw=cctx.measureText(txt).width/2;
+      if(x-hw>=0&&x+hw<=w) cctx.fillText(txt,x,padT+ih+12);
+    }
+    cctx.stroke();
+  }
+  cctx.strokeStyle=css("--border"); cctx.beginPath();
+  cctx.moveTo(padL+0.5,padT); cctx.lineTo(padL+0.5,padT+ih+0.5); cctx.lineTo(w-padR,padT+ih+0.5);
+  cctx.stroke();
+  cctx.fillStyle=muted; cctx.textAlign="center";
+  cctx.fillText("step",padL+iw/2,h-4);
+  if(N<2) return;
+  const series=[["p","--series-1"],["n","--series-2"],["s","--series-3"]];
+  for(const [key,col] of series){
+    cctx.strokeStyle=css(col); cctx.lineWidth=2; cctx.beginPath();
+    const step=Math.max(1,Math.floor(N/iw));
+    for(let q=0;q<N;q+=step){ const x=X(hist.t[q]),y=Y(hist[key][q]); q===0?cctx.moveTo(x,y):cctx.lineTo(x,y); }
+    cctx.lineTo(X(t1),Y(hist[key][N-1])); cctx.stroke();
+  }
+  if(hist.bt.length>1){
+    cctx.strokeStyle=css("--series-4"); cctx.lineWidth=2; cctx.beginPath();
+    for(let q=0;q<hist.bt.length;q++){ const x=X(hist.bt[q]),y=Y(hist.bv[q]); q===0?cctx.moveTo(x,y):cctx.lineTo(x,y); }
+    cctx.stroke();
+  }
+  const marks=[];
+  if(hoverT!=null) marks.push([hoverT,css("--text-muted")]);
+  if(replay.on) marks.push([replay.T,css("--series-4")]);
+  for(const [mt,mc] of marks){
+    const x=X(mt);
+    cctx.strokeStyle=mc; cctx.lineWidth=1;
+    cctx.setLineDash([3,3]); cctx.beginPath(); cctx.moveTo(x,padT); cctx.lineTo(x,padT+ih); cctx.stroke(); cctx.setLineDash([]);
+  }
+}
+let hoverT=null;
+ccv.addEventListener("mousemove",e=>{
+  const r=ccv.getBoundingClientRect(); const N=hist.t.length; if(N<2) return;
+  const frac=Math.min(1,Math.max(0,(e.clientX-r.left-CH.padL)/(r.width-CH.padL-CH.padR)));
+  const t=hist.t[0]+frac*(hist.t[N-1]-hist.t[0]);
+  let q=0; while(q<N-1&&hist.t[q]<t) q++;
+  hoverT=hist.t[q];
+  const tip=$("tip");
+  tip.style.display="block";
+  tip.style.left=Math.min(r.width-130,e.clientX-r.left+10)+"px";
+  tip.style.top=(e.clientY-r.top-10)+"px";
+  tip.innerHTML=`step <b>${hist.t[q]}</b><br>polar <b>${hist.p[q].toFixed(3)}</b> · nematic <b>${hist.n[q].toFixed(3)}</b><br>spatial <b>${hist.s[q].toFixed(3)}</b>`;
+  drawChart();
+});
+ccv.addEventListener("mouseleave",()=>{ hoverT=null; $("tip").style.display="none"; drawChart(); });
+
+/* ---------------- legends ---------------- */
+function updateLegends(){
+  const leg=$("hueLeg"), dl=$("dirLeg");
+  if(P.mode!=="particles"){
+    dl.style.display="none";
+    const mode=$("inView").value;
+    if(mode!=="nem"&&mode!=="dir"){ leg.style.display="none"; return; }
+    leg.style.display="flex";
+    const stops=[];
+    if(mode==="nem"){
+      for(let a=0;a<=180;a+=15) stops.push(`hsl(${(a*2+180)%360} 80% 55%) ${(a/180*100).toFixed(0)}%`);
+      $("hueL0").textContent="axis 0°"; $("hueL1").textContent="axis 180°";
+    } else {
+      for(let a=0;a<=360;a+=30) stops.push(`hsl(${a} 80% 55%) ${(a/360*100).toFixed(0)}%`);
+      $("hueL0").textContent="motion 0°"; $("hueL1").textContent="360°";
+    }
+    $("hueBar").style.background=`linear-gradient(90deg,${stops.join(",")})`;
+  } else {
+    leg.style.display="none";
+    if(P.pcol==="dir"){
+      dl.style.display="flex";
+      dl.innerHTML='<span>travel direction:</span>'+DIRCOL.map((c,k)=>
+        `<span style="display:inline-flex;align-items:center;gap:3px"><span class="chip" style="background:${c};width:9px;height:9px"></span>${DIRARR[k]}</span>`).join("");
+    } else dl.style.display="none";
+  }
+}
+
+/* ---------------- site inspector ---------------- */
+const sTip=$("siteTip");
+let panMoved=false;
+cvs.addEventListener("mousemove",e=>{
+  if(!sim||panning){ return; }
+  const r=cvs.getBoundingClientRect();
+  const wx=view.x+(e.clientX-r.left)/view.zoom;
+  const wy=view.y+(e.clientY-r.top)/view.zoom;
+  const H3=Math.sqrt(3)/2;
+  let jj=Math.round(wy/(H3*s0)-0.5);
+  let raw=wx/s0-0.5-jj*0.5;
+  let ii=Math.round(raw);
+  const j=((jj%sim.H)+sim.H)%sim.H;
+  const i=((ii%sim.W)+sim.W)%sim.W;
+  const arr=replay.on?replayStreamed():sim.occ;
+  const b=(j*sim.W+i)*6, ns=[];
+  let n=0,qx=0,qy=0,fx=0,fy=0;
+  for(let k=0;k<6;k++){ const o=arr[b+k]; ns.push(o); n+=o;
+    fx+=o*CX[k]; fy+=o*CY[k];
+    qx+=o*(2*CX[k]*CX[k]-1); qy+=o*2*CX[k]*CY[k]; }
+  const axDeg=n?((((Math.atan2(qy,qx)/2)*57.29578)%180+180)%180).toFixed(0)+"°":"–";
+  const axStr=n?(Math.hypot(qx,qy)/n).toFixed(2):"–";
+  sTip.innerHTML=`site (${i}, ${j}) — <b>${n}</b> particle${n===1?"":"s"}<br>`+
+    `axis <b>${axDeg}</b> · alignment <b>${axStr}</b><br>`+
+    `channels [${ns.join(", ")}]<canvas id="roseCv" width="66" height="66"></canvas>`;
+  sTip.style.display="block";
+  sTip.style.left=Math.min(r.width-150,e.clientX-r.left+16)+"px";
+  sTip.style.top=(e.clientY-r.top+4)+"px";
+  const rc=document.getElementById("roseCv").getContext("2d");
+  rc.clearRect(0,0,66,66);
+  rc.strokeStyle="rgba(128,128,128,0.4)"; rc.lineWidth=1;
+  rc.beginPath(); rc.arc(33,33,28,0,6.2832); rc.stroke();
+  const mxn=Math.max(1,...ns);
+  rc.lineWidth=3; rc.lineCap="round";
+  for(let k=0;k<6;k++){
+    if(!ns[k]) continue;
+    const L=6+22*ns[k]/mxn;
+    rc.strokeStyle=P.pcol==="dir"&&P.mode==="particles"?DIRCOL[k]:css("--accent");
+    rc.beginPath(); rc.moveTo(33,33); rc.lineTo(33+L*CX[k],33-L*CY[k]); rc.stroke();
+  }
+  if(n){
+    const mm=Math.hypot(fx,fy);
+    if(mm/n>0.05){
+      rc.strokeStyle="#fff"; rc.lineWidth=1.5;
+      rc.beginPath(); rc.moveTo(33,33); rc.lineTo(33+26*fx/mm,33-26*fy/mm); rc.stroke();
+    }
+  }
+});
+cvs.addEventListener("mouseleave",()=>{ sTip.style.display="none"; });
+
+/* ---------------- pan & zoom ---------------- */
+let panning=false, panStart=null;
+cvs.addEventListener("pointerdown",e=>{
+  panning=true; panMoved=false; cvs.classList.add("panning");
+  panStart={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y};
+  cvs.setPointerCapture(e.pointerId);
+  sTip.style.display="none";
+});
+cvs.addEventListener("pointermove",e=>{
+  if(!panning) return;
+  const dx=e.clientX-panStart.x, dy=e.clientY-panStart.y;
+  if(Math.abs(dx)+Math.abs(dy)>3) panMoved=true;
+  view.x=panStart.vx-dx/view.zoom;
+  view.y=panStart.vy-dy/view.zoom;
+  normalizeView();
+  needTrailClear=true;
+});
+cvs.addEventListener("pointerup",e=>{ panning=false; cvs.classList.remove("panning"); });
+cvs.addEventListener("wheel",e=>{
+  e.preventDefault();
+  const r=cvs.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const wx=view.x+mx/view.zoom, wy=view.y+my/view.zoom;
+  const nz=Math.min(16,Math.max(1,view.zoom*Math.exp(-e.deltaY*0.0016)));
+  view.zoom=nz;
+  view.x=wx-mx/nz; view.y=wy-my/nz;
+  normalizeView();
+  $("stZoom").textContent=nz.toFixed(1)+"×";
+  needTrailClear=true;
+},{passive:false});
+cvs.addEventListener("dblclick",()=>{ resetVw(); });
+function normalizeView(){
+  while(view.y>=worldH){ view.y-=worldH; view.x-=shearX; }
+  while(view.y<0){ view.y+=worldH; view.x+=shearX; }
+  view.x=((view.x%worldW)+worldW)%worldW;
+}
+function resetVw(){ view={x:0,y:0,zoom:1}; $("stZoom").textContent="1.0×"; needTrailClear=true; }
+$("bView").addEventListener("click",resetVw);
+
+/* ---------------- presets ---------------- */
+const PRESETS={
+  boson:[["noise","0.5,0.4"],["tipping point","1.0,0.4"],["stripes","2.0,0.4"],["dilute","2.0,0.1"]],
+  fermion:[["noise","0.2,0.2"],["onset","0.4,0.2"],["flocking","0.8,0.2"],["dilute","1.5,0.05"]]
+};
+function buildPresets(){
+  const row=$("presetRow"); row.innerHTML="";
+  for(const [name,pd] of PRESETS[P.model]){
+    const b=document.createElement("button");
+    b.textContent=name;
+    b.addEventListener("click",()=>{
+      const [ps,dd]=pd.split(",");
+      P.sens=+ps; $("inSens").value=ps; $("numSens").value=ps; $("inDens").value=dd; reset();
+    });
+    row.appendChild(b);
+  }
+  if(P.model==="boson") for(const a of [0,0.5,1]){
+    const b=document.createElement("button"); b.textContent=`polar neighbours · α ${a}`;
+    b.addEventListener("click",()=>{
+      playing=false; $("bPlay").textContent="Play";
+      applySnap({model:"boson",size:180,dens:0.4,sens:6,seed:12345,kernel:"power",alpha:a,bosonField:"neigh",bosonAlign:"polar"});
+      $("segMode").querySelector('[data-v="density"]').click();
+    }); row.appendChild(b);
+  }
+}
+
+/* ---------------- segmented controls ---------------- */
+function segWire(id,key,cb){
+  const seg=$(id);
+  seg.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    seg.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
+    P[key]=b.dataset.v;
+    if(cb) cb(b.dataset.v);
+  }));
+}
+segWire("segModel","model",v=>{
+  const fer=v==="fermion";
+  $("rowBosonField").style.display=fer?"none":"contents";
+  if(fer){ if(+$("inDens").value>=1) $("inDens").value=0.2; $("inDens").max=0.95; }
+  else $("inDens").max=6;
+  const d={fermion:[0.8,0.2],boson:[2.0,0.4]}[v];
+  P.sens=d[0]; $("inSens").value=d[0]; $("numSens").value=d[0]; $("inDens").value=d[1];
+  buildPresets(); reset();
+});
+function updateAlpha(){
+  $("rowAlpha").style.display=P.kernel==="power"?"contents":"none";
+  const a=P.kernel==="sum"?0:P.kernel==="avg"?1:P.alpha;
+  $("alphaNote").textContent=`α = ${a} · field / Mᵅ. M counts contributing particles; an empty field is unbiased.`;
+  if(sim){ sim.kernel=P.kernel; sim.alpha=P.alpha; }
+}
+segWire("segKernel","kernel",updateAlpha);
+function changeAlpha(value){
+  const a=Number(value); if(!Number.isFinite(a)) return;
+  P.alpha=Math.max(0,Math.min(2,a));
+  $("inAlpha").value=P.alpha; $("numAlpha").value=P.alpha; updateAlpha();
+}
+$("inAlpha").addEventListener("input",e=>changeAlpha(e.target.value));
+$("numAlpha").addEventListener("change",e=>changeAlpha(e.target.value));
+$("bAlphaDown").addEventListener("click",()=>changeAlpha(+(P.alpha-0.1).toFixed(12)));
+$("bAlphaUp").addEventListener("click",()=>changeAlpha(+(P.alpha+0.1).toFixed(12)));
+segWire("segField","bosonField",()=>{ if(sim){ sim.bosonField=P.bosonField; } });
+segWire("segAlign","bosonAlign",()=>{ if(sim){ sim.bosonAlign=P.bosonAlign; } });
+segWire("segMode","mode",v=>{
+  $("rowsParticles").style.display=v==="particles"?"contents":"none";
+  $("rowsFields").style.display=v!=="particles"?"contents":"none";
+  if(v==="density"){ $("inView").value="countlog"; $("inOver").value="none"; $("inSmooth").value="crisp"; }
+  needTrailClear=true; updateLegends();
+});
+segWire("segMotion","motion",()=>{ needTrailClear=true; });
+segWire("segPCol","pcol",()=>{ updateLegends(); });
+segWire("segTrail","trail",()=>{ needTrailClear=true; });
+
+/* ---------------- main loop ---------------- */
+function frame(now){
+  const target=SPEEDS[+$("inSpeed").value];
+  const dt=Math.min(0.25,(now-lastFrame)/1000);
+  lastFrame=now;
+  if(playing&&sim&&!replay.on){
+    if(target===Infinity){
+      const t0=performance.now(); let did=0;
+      while(performance.now()-t0<12){ sim.step(P.sens); record(); pushReplay(); did++; }
+      spsCount+=did; phase=0; updateBufLabel();
+    } else {
+      phase+=dt*target;
+      let did=0;
+      while(phase>=1&&did<400){ phase-=1; sim.step(P.sens); record(); pushReplay(); did++; }
+      if(did>0){ spsCount+=did; updateBufLabel(); }
+      if(phase>1) phase=1;
+    }
+  } else if(stepAnim>0&&sim){
+    phase=Math.min(1,phase+dt/0.45);
+    if(phase>=1) stepAnim=0;
+  }
+  if(now-spsT0>800){ spsMeter=spsCount/((now-spsT0)/1000); spsCount=0; spsT0=now; $("stSps").textContent=spsMeter<10?spsMeter.toFixed(1):spsMeter.toFixed(0); }
+  if(sim){
+    draw(); updateDensityReadout();
+    $("stT").textContent=replay.on?`${replay.k} (replay)`:sim.t;
+    $("stN").textContent=sim.nuparts;
+    if(sim._m){ $("stOcc").textContent=(100*sim._m.occFrac).toFixed(0)+"%";
+      $("vPol").textContent=sim._m.polar.toFixed(3);
+      $("vNem").textContent=sim._m.nematic.toFixed(3);
+      $("vSpa").textContent=sim._m.spatial.toFixed(3); }
+    if(sim._b!=null) $("vBan").textContent=sim._b.toFixed(3);
+    drawChart();
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- wiring ---------------- */
+$("inSens").addEventListener("input",e=>{ P.sens=+e.target.value; $("numSens").value=e.target.value; });
+$("numSens").addEventListener("input",e=>{ P.sens=+e.target.value||0; $("inSens").value=e.target.value; });
+$("inSpeed").addEventListener("input",()=>{ const v=SPEEDS[+$("inSpeed").value];
+  $("lblSpeed").textContent=v===Infinity?"max":(v<1?v+" /s":v+" /s"); });
+$("bPlay").addEventListener("click",()=>{
+  if(replay.on) jumpTo(replay.k);
+  playing=!playing; $("bPlay").textContent=playing?"Pause":"Play";
+});
+$("bStep1").addEventListener("click",()=>{
+  if(replay.on) jumpTo(replay.k);
+  playing=false; $("bPlay").textContent="Play";
+  doSteps(1); phase=0; stepAnim=1;
+});
+const jumpN=()=>Math.max(1,Math.round(+$("inJump").value||1));
+$("bBack1").addEventListener("click",()=>{ back(1); });
+$("bBackN").addEventListener("click",()=>{ back(jumpN()); });
+$("bFwdN").addEventListener("click",()=>{ fwdN(jumpN()); });
+$("bReset").addEventListener("click",reset);
+$("bDice").addEventListener("click",()=>{ $("inSeed").value=Math.floor(Math.random()*1e9); reset(); });
+$("bLive").addEventListener("click",()=>{ exitReplay(); });
+$("inReplay").addEventListener("input",e=>{
+  enterReplay(+e.target.value); drawChart();
+});
+$("inView").addEventListener("change",updateLegends);
+$("bCsv").addEventListener("click",()=>{
+  let out="step,polar,nematic,spatial,band,N,mean_count,nmax,peak_fraction,effective_area,sensitivity,alpha,kernel,field,alignment\n", bq=0;
+  for(let q=0;q<hist.t.length;q++){
+    while(bq<hist.bt.length&&hist.bt[bq]<hist.t[q]) bq++;
+    const band=(bq<hist.bt.length&&hist.bt[bq]===hist.t[q])?hist.bv[bq]:"";
+    const d=hist.rho[q],c=hist.cfg[q];
+    out+=`${hist.t[q]},${hist.p[q]},${hist.n[q]},${hist.s[q]},${band},${d.N},${d.mean},${d.max},${d.fraction},${d.effectiveArea},${c.sens},${c.alpha},${c.kernel},${c.field},${c.alignment}\n`;
+  }
+  const done=msg=>{ $("bCsv").textContent=msg; setTimeout(()=>$("bCsv").textContent="copy data (CSV)",1400); };
+  const saveFile=()=>{
+    const a=document.createElement("a");
+    a.download=`lgca-${P.model}-s${P.sens}-d${sim._dens}-t${sim.t}.csv`;
+    a.href=URL.createObjectURL(new Blob([out],{type:"text/csv"}));
+    a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    done("saved .csv");
+  };
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(out).then(()=>done("copied!"),saveFile);
+  else saveFile();
+});
+document.addEventListener("keydown",e=>{
+  if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT"||e.target.tagName==="TEXTAREA") return;
+  if(e.code==="Space"){ e.preventDefault(); $("bPlay").click(); }
+  else if(e.key==="."){ $("bStep1").click(); }
+  else if(e.key===","){ back(1); }
+  else if(e.key==="]"){ fwdN(jumpN()); }
+  else if(e.key==="["){ back(jumpN()); }
+  else if(e.key==="0"){ resetVw(); }
+});
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ drawChart(); });
+
+/* ---------------- settings snapshots ---------------- */
+const SNAP_KEY="lgcaSettingsSnapshots";
+function loadSnaps(){ try{ const a=JSON.parse(localStorage.getItem(SNAP_KEY)); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function persistSnaps(){ try{ localStorage.setItem(SNAP_KEY,JSON.stringify(snaps)); }catch(e){} }
+let snaps=loadSnaps();
+function currentSettings(){
+  return { model:P.model, sens:P.sens, dens:+$("inDens").value, size:+$("inSize").value,
+           seed:+$("inSeed").value, kernel:P.kernel, alpha:P.alpha, bosonField:P.bosonField, bosonAlign:P.bosonAlign };
+}
+function snapParamLine(s){
+  const phys=s.model==="fermion" ? `kernel ${s.kernel}`
+    : `${s.kernel} · ${s.bosonField==="site"?"own site":s.bosonField==="both"?"site + neighbours":"neighbours only"} · ${s.bosonAlign}`;
+  return `α ${s.kernel==="power"?s.alpha:s.kernel==="avg"?1:0} · ${s.model} · ${s.size}×${s.size} · dens ${s.dens} · sens ${s.sens} · seed ${s.seed} · ${phys}`;
+}
+function setSeg(id,key,v){
+  P[key]=v;
+  $(id).querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
+}
+/* Re-run a saved recipe from step 0. Sets every control the recipe covers,
+   then Reset — deliberately NOT via the segModel click handler, which would
+   overwrite sens/dens with model defaults. */
+function applySnap(s){
+  setSeg("segModel","model",s.model);
+  const fer=s.model==="fermion";
+  $("rowBosonField").style.display=fer?"none":"contents";
+  $("inDens").max=fer?0.95:6;
+  buildPresets();
+  if(![...$("inSize").options].some(o=>+o.value===+s.size)){
+    const o=document.createElement("option"); o.textContent=s.size; $("inSize").appendChild(o);
+  }
+  $("inSize").value=s.size;
+  $("inDens").value=s.dens;
+  $("inSeed").value=s.seed;
+  P.sens=+s.sens; $("inSens").value=s.sens; $("numSens").value=s.sens;
+  setSeg("segKernel","kernel",s.kernel||"sum");
+  changeAlpha(s.alpha==null?0.5:s.alpha);
+  setSeg("segField","bosonField",s.bosonField||"site");
+  setSeg("segAlign","bosonAlign",s.bosonAlign||"nematic");
+  reset();
+}
+function renderSnaps(){
+  const list=$("snapList"); list.textContent="";
+  if(!snaps.length){
+    const d=document.createElement("div"); d.className="note";
+    d.textContent="nothing saved yet.";
+    list.appendChild(d); return;
+  }
+  for(const s of snaps){
+    const d=document.createElement("details"); d.className="snap";
+    const su=document.createElement("summary");
+    const nm=document.createElement("b"); nm.textContent=s.name||"(unnamed)";
+    const wh=document.createElement("span"); wh.className="snapWhen"; wh.textContent=s.when||"";
+    su.appendChild(nm); su.appendChild(wh); d.appendChild(su);
+    const body=document.createElement("div"); body.className="snapBody";
+    const pl=document.createElement("div"); pl.className="snapParams"; pl.textContent=snapParamLine(s);
+    body.appendChild(pl);
+    if(s.desc){ const de=document.createElement("div"); de.className="snapDesc"; de.textContent=s.desc; body.appendChild(de); }
+    const row=document.createElement("div"); row.className="btnrow";
+    const bA=document.createElement("button"); bA.textContent="apply (reset)";
+    bA.addEventListener("click",()=>{ applySnap(s); });
+    const bC=document.createElement("button"); bC.textContent="copy JSON";
+    bC.addEventListener("click",()=>{
+      const txt=JSON.stringify(s);
+      const ok=()=>{ bC.textContent="copied!"; setTimeout(()=>bC.textContent="copy JSON",1200); };
+      if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok,()=>prompt("copy:",txt));
+      else prompt("copy:",txt);
+    });
+    const bD=document.createElement("button"); bD.textContent="delete";
+    bD.addEventListener("click",()=>{
+      if(bD.dataset.armed){ snaps=snaps.filter(x=>x!==s); persistSnaps(); renderSnaps(); return; }
+      bD.dataset.armed="1"; bD.textContent="sure?";
+      setTimeout(()=>{ delete bD.dataset.armed; bD.textContent="delete"; },1800);
+    });
+    row.appendChild(bA); row.appendChild(bC); row.appendChild(bD);
+    body.appendChild(row);
+    d.appendChild(body);
+    list.appendChild(d);
+  }
+}
+function todayStr(){
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+$("bSnapSave").addEventListener("click",()=>{
+  const s=currentSettings();
+  s.name=$("snapName").value.trim()||`${s.model} s${s.sens} d${s.dens}`;
+  s.desc=$("snapDesc").value.trim();
+  s.when=todayStr();
+  snaps.unshift(s); persistSnaps(); renderSnaps();
+  $("snapName").value=""; $("snapDesc").value="";
+  $("bSnapSave").textContent="saved ✓";
+  setTimeout(()=>$("bSnapSave").textContent="save current settings",1200);
+});
+$("bSnapExp").addEventListener("click",()=>{
+  const a=document.createElement("a");
+  a.download=`lgca-settings-${todayStr()}.json`;
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(snaps,null,1)],{type:"application/json"}));
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+});
+$("bSnapImp").addEventListener("click",()=>$("snapFile").click());
+$("snapFile").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f) return;
+  f.text().then(txt=>{
+    let a=null; try{ a=JSON.parse(txt); }catch(err){}
+    if(!Array.isArray(a)){ alert("Not a settings-snapshot .json (expected an array)."); return; }
+    let n=0;
+    for(const s of a)
+      if(s&&typeof s==="object"&&s.model&&s.size!=null&&s.dens!=null&&s.sens!=null&&s.seed!=null){ snaps.push(s); n++; }
+    persistSnaps(); renderSnaps();
+    $("bSnapImp").textContent=`imported ${n}`;
+    setTimeout(()=>$("bSnapImp").textContent="import .json",1500);
+  });
+  e.target.value="";
+});
+renderSnaps();
+
+/* notes card lives under the canvas, outside the reorderable column — its
+   open state is persisted separately */
+try{ if(localStorage.getItem("lgcaNotesOpen")==="1") $("notesCard").open=true; }catch(e){}
+$("notesCard").addEventListener("toggle",()=>{
+  try{ localStorage.setItem("lgcaNotesOpen",$("notesCard").open?"1":"0"); }catch(e){}
+});
+
+/* ---------------- collapsible / reorderable cards ---------------- */
+const colEl=document.querySelector(".col");
+const cardKey=d=>d.dataset.card;
+function saveCards(){
+  try{ localStorage.setItem("lgcaCards", JSON.stringify({
+    order:[...colEl.children].map(cardKey),
+    open:Object.fromEntries([...colEl.children].map(d=>[cardKey(d),d.open])) })); }catch(e){}
+}
+function loadCards(){
+  let s=null; try{ s=JSON.parse(localStorage.getItem("lgcaCards")); }catch(e){}
+  if(!s) return;
+  if(Array.isArray(s.order))
+    for(const k of s.order){ const d=colEl.querySelector(`details[data-card="${k}"]`); if(d) colEl.appendChild(d); }
+  if(s.open)
+    for(const d of colEl.children) if(cardKey(d) in s.open) d.open=!!s.open[cardKey(d)];
+}
+let dragSrc=null;
+colEl.addEventListener("click",e=>{ if(e.target.closest(".dragH")) e.preventDefault(); });
+colEl.addEventListener("dragstart",e=>{
+  const h=e.target.closest(".dragH");
+  if(!h){ e.preventDefault(); return; }
+  dragSrc=h.closest("details.card");
+  dragSrc.classList.add("dragging");
+  e.dataTransfer.effectAllowed="move";
+  e.dataTransfer.setData("text/plain",cardKey(dragSrc));
+});
+colEl.addEventListener("dragover",e=>{
+  if(!dragSrc) return;
+  e.preventDefault();
+  const t=e.target.closest("details.card");
+  if(!t||t===dragSrc) return;
+  const r=t.getBoundingClientRect();
+  colEl.insertBefore(dragSrc, e.clientY<r.top+r.height/2 ? t : t.nextSibling);
+});
+colEl.addEventListener("drop",e=>{ e.preventDefault(); });
+colEl.addEventListener("dragend",()=>{
+  if(dragSrc) dragSrc.classList.remove("dragging");
+  dragSrc=null; saveCards(); drawChart();
+});
+colEl.addEventListener("toggle",e=>{
+  if(e.target.matches("details.card")){ saveCards(); if(cardKey(e.target)==="chart") drawChart(); }
+},true);
+
+buildPresets();
+updateLegends();
+loadCards();
+reset();
+// Optional reproducible study links; ordinary launches keep all C++ defaults.
+const studyLink=new URLSearchParams(location.search);
+if(studyLink.get("study")==="alpha"){
+  const a=Number(studyLink.get("alpha")||0), size=Number(studyLink.get("size")||180), sens=Number(studyLink.get("sens")||6), seed=Number(studyLink.get("seed")||12345), dens=Number(studyLink.get("dens")??0.4);
+  if(Number.isFinite(a)&&a>=0&&a<=2&&[60,90,120,180,240,360].includes(size)&&Number.isFinite(sens)&&sens>=0&&Number.isInteger(seed)&&Number.isFinite(dens)&&dens>=0){
+    const field=studyLink.get("field");
+    applySnap({model:"boson",size,dens,sens,seed,kernel:"power",alpha:a,bosonField:["site","neigh","both"].includes(field)?field:"neigh",bosonAlign:"polar"});
+    playing=false; $("bPlay").textContent="Play";
+    $("segMode").querySelector('[data-v="density"]').click();
+  }
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

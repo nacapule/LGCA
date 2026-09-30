@@ -1,18 +1,7 @@
-"""Figures for the density x alpha sweep.
+"""Figures of the density x alpha sweep.
 
-Setting: polar bosons, field from the centre site plus its six neighbours,
-sensitivity 6. Main sweep: 90x90 box, 12 starting densities, alpha 0 to 1.
-Box-size runs: fixed starting density 0.4 per channel, L = 90, 120, 180, 240.
-
-The script works in two steps:
-  1. With --data DIR (the saved run records, which are not in this
-     repository), average the runs over seeds and write three CSV files
-     into the study folder.
-  2. Draw the four figures from those CSV files into figures/.
-
-Usage, from the study folder:
-  python3 build/figures.py              # redraw the figures from the CSVs
-  python3 build/figures.py --data data  # re-export the CSVs first
+python3 build/figures.py              makes the figures from the CSVs
+python3 build/figures.py --data data  first makes the CSVs from the runs (not in repo)
 """
 import argparse
 import csv
@@ -30,22 +19,20 @@ from matplotlib.ticker import FuncFormatter, NullFormatter
 STUDY = Path(__file__).resolve().parent.parent
 FIGURES = STUDY / "figures"
 
-T = 20000                 # every run used here reached this step
-LATE_START = 15100        # late window = steps 15,100 to 20,000 (last quarter)
+T = 20000
+LATE_START = 15100  # last quarter of the run
 MAIN_SIZE = 90
 AREA = MAIN_SIZE * MAIN_SIZE
 COARSE_ALPHAS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 FOCUS_ALPHAS = [0.8, 0.85, 0.9, 1]
 BOX_SIZES = [90, 120, 180, 240]
 BOX_DENSITY = 0.4
-BOX_SEEDS = [12345, 777, 424242]  # the seeds run at all four box sizes
+BOX_SEEDS = [12345, 777, 424242]
 
 SUMMARY_CSV = STUDY / "summary-t20000-prelim.csv"
 TIME_CSV = STUDY / "cluster-density-vs-time-t20000.csv"
 BOX_CSV = STUDY / "condensate-vs-box-size-t20000.csv"
 
-
-# ---------------------------------------------------------------- CSV helpers
 
 def read_csv(path):
     with path.open(newline="") as stream:
@@ -60,14 +47,10 @@ def write_csv(path, fields, rows):
 
 
 def curve_column(alpha, dens):
-    """Column name in TIME_CSV for one (alpha, starting density) curve."""
     return f"a{alpha:g}_d{dens:g}"
 
 
-# ------------------------------------------- step 1: export CSVs from the runs
-
 def load_finished_runs(data):
-    """Every run record under data/ that reached step T, cut at T."""
     runs = []
     for path in sorted(data.glob("both-L*/run.json")):
         record = json.loads(path.read_text())
@@ -88,22 +71,16 @@ def load_finished_runs(data):
 
 
 def late_mean(run, key):
-    """Mean of one observable over the late window of one run."""
     return run[key][run["t"] >= LATE_START].mean()
 
 
 def export_main_sweep(runs):
-    """Write SUMMARY_CSV (late-window averages) and TIME_CSV (mean curves).
-
-    Each alpha row uses one set of seeds: the seeds that finished at every
-    starting density of that row (5 seeds for the coarse alphas, 3 for the
-    finer ones). Rows with fewer than 3 seeds are left out.
-    """
     main = [run for run in runs if run["size"] == MAIN_SIZE]
     densities = sorted({run["dens"] for run in main})
     seeds_by_cell = {}
     for run in main:
         seeds_by_cell.setdefault((run["alpha"], run["dens"]), set()).add(run["seed"])
+    # each alpha uses the seeds that finished for all densities (5, or 3 for finer alphas)
     row_seeds = {}
     for alpha in sorted({run["alpha"] for run in main}):
         common = set.intersection(*[seeds_by_cell.get((alpha, dens), set())
@@ -152,7 +129,6 @@ def export_main_sweep(runs):
 
 
 def export_box_sizes(runs):
-    """Write BOX_CSV: late condensate size N_c (kmax) per alpha and box size."""
     rows = []
     for alpha in FOCUS_ALPHAS:
         for size in BOX_SIZES:
@@ -177,8 +153,6 @@ def export_box_sizes(runs):
     write_csv(BOX_CSV, list(rows[0]), rows)
 
 
-# ------------------------------------------------- step 2: draw the figures
-
 def number_label(value, _position=None):
     return f"{value:g}" if value < 1000 else f"{value / 1000:g}k"
 
@@ -191,7 +165,6 @@ def seed_label(alphas, seeds):
 
 
 def density_colours(densities):
-    """Curves are coloured by expected starting density 6 x dens (log scale)."""
     norm = LogNorm(6 * densities[0], 6 * densities[-1])
     cmap = plt.get_cmap("viridis")
     colour = {dens: cmap(norm(6 * dens)) for dens in densities}
@@ -206,7 +179,6 @@ def save(fig, name):
 
 
 def plot_time_grid(alphas, times, curves, densities, seeds, name):
-    """One log-log panel per alpha, one curve per starting density."""
     colour, scale = density_colours(densities)
     mixed = len({seeds[alpha] for alpha in alphas}) > 1
     ncol = 4
@@ -216,7 +188,7 @@ def plot_time_grid(alphas, times, curves, densities, seeds, name):
     for ax, alpha in zip(axes.flat, alphas):
         for dens in densities:
             values = curves[curve_column(alpha, dens)]
-            ax.plot(times[1:], values[1:], color=colour[dens], lw=1.1)  # skip t = 0
+            ax.plot(times[1:], values[1:], color=colour[dens], lw=1.1)
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlim(25, T)
@@ -241,9 +213,6 @@ def plot_time_grid(alphas, times, curves, densities, seeds, name):
 
 
 def plot_focus(times, curves, densities, seeds):
-    """Four alphas side by side. Top row: time axis linear up to step 500,
-    logarithmic after, so the early rise and the long run share one panel
-    (dots = saved samples up to step 500). Bottom row: plain linear time."""
     colour, scale = density_colours(densities)
     fig, axes = plt.subplots(2, len(FOCUS_ALPHAS), figsize=(16, 7),
                              layout="constrained", squeeze=False, sharey=True,
@@ -260,7 +229,7 @@ def plot_focus(times, curves, densities, seeds):
             bottom.plot(times, values, color=colour[dens], lw=1.1)
         top.set_xscale("symlog", linthresh=500, linscale=1.5)
         top.set_xlim(0, T)
-        top.set_xticks(ticks)  # labels come from number_label below
+        top.set_xticks(ticks)
         top.xaxis.set_minor_formatter(NullFormatter())
         top.axvline(500, color="#9aa3a7", lw=0.8, ls=":")
         top.text(500, 0.015, " linear ← | → log ", transform=top.get_xaxis_transform(),
@@ -288,7 +257,6 @@ def plot_focus(times, curves, densities, seeds):
 
 
 def plot_box_sizes(rows):
-    """Late condensate size N_c against box side L at fixed average density."""
     cmap = plt.get_cmap("plasma")
     fig, ax = plt.subplots(figsize=(7.6, 5), layout="constrained")
     for k, alpha in enumerate(FOCUS_ALPHAS):
@@ -328,10 +296,9 @@ def draw_figures():
 
     table = read_csv(TIME_CSV)
     times = np.array([int(row["t"]) for row in table])
-    # A cluster density of 0 means no site passed the cutoff (only at t = 0 for
-    # the densest starts); leave those points out rather than plot log(0).
     curves = {name: np.array([float(row[name]) for row in table])
               for name in table[0] if name != "t"}
+    # 0 = no cluster yet (t = 0, densest starts), don't plot it on log axis
     curves = {name: np.where(values > 0, values, np.nan)
               for name, values in curves.items()}
 
@@ -358,7 +325,7 @@ def draw_figures():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data", type=Path, help="folder with the saved run records")
+    parser.add_argument("--data", type=Path, help="folder with the saved runs")
     args = parser.parse_args()
     if args.data:
         finished = load_finished_runs(args.data)

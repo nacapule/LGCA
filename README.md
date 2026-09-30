@@ -1,50 +1,56 @@
 # LGCA
 
-Hexagonal lattice-gas cellular automaton. The reference code is
-`lgca/lgca_clean-1.cpp`, with the WELL1024a generator in `rng/` and CImg in
-`CImg/` for the display build; those files are unchanged from the upstream
-repository. This fork adds a browser version of the model and one study.
+My fork of the LGCA code (hexagonal lattice gas, with fermion and boson versions).
+The original C++ is `lgca/lgca_clean-1.cpp`, with the WELL1024a random generator in
+`rng/` and CImg in `CImg/` for the window display. I did not change these files.
+
+What I add is two things: a version of the model that runs in the browser (LGCA Lab),
+and the results of the alpha study we talked about in September.
 
 ## LGCA Lab
 
-[Open LGCA Lab](https://nacapule.github.io/LGCA/lgca-viz/lgca-lab.html), or open
-`lgca-viz/lgca-lab.html` locally; nothing needs to be installed. It is a
-JavaScript port of the C++ that reproduces it state for state: with the same seed
-and settings, the parity check below finds the same lattice and the same
-random-number stream. Its defaults are the C++ defaults. The alpha
-normalization and the centre-plus-neighbours field used in the study are extra
-options, off by default.
+Open it here: https://nacapule.github.io/LGCA/lgca-viz/lgca-lab.html, or open
+`lgca-viz/lgca-lab.html` directly (is one HTML file, nothing to install).
 
-Parity check (needs Node.js and a C++ compiler): `node lgca-viz/verify-parity.mjs`
-compiles the C++ and compares every lattice value and the full RNG state with the
-JavaScript engine in 10 scenarios. See [docs/FIDELITY.md](docs/FIDELITY.md).
+The Lab is the C++ translated to JavaScript, random generator included, so with the
+same seed and the same parameters it gives the same lattice in every step and the same
+random numbers than the C++. Default parameters are the ones of the C++. The alpha
+normalization and the field with centre site + 6 neighbours are options I added for
+the study, they are off by default.
 
-## Study: density × alpha (September 30)
+To check it against the C++: `node lgca-viz/verify-parity.mjs` (needs Node.js and a
+C++ compiler). It compiles the C++ and compares the whole lattice and the full state of
+the random generator with the JavaScript, in 10 cases with fermions and bosons,
+different seeds, densities and sensitivities. More detail in [docs/FIDELITY.md](docs/FIDELITY.md).
 
-For which alpha does the cluster density keep growing as the number of particles
-grows? The alignment field is divided by M^alpha, where M is the number of
-particles contributing to it: alpha 0 is the plain sum, alpha 1 the average.
-Setting: polar bosons, field from the centre site plus its six neighbours,
-sensitivity 6. Definitions are in [docs/PHYSICS.md](docs/PHYSICS.md).
+## Alpha study (Sep 30)
 
-- [Cluster density vs time at alpha 0.8 / 0.85 / 0.9 / 1](results/density-alpha-sweep-2026-09-30/figures/focus-transition-t20000-prelim.png):
-  one panel per alpha, one curve per starting density (12 densities, 90×90 box).
-- The same curves for [alpha 0 to 1](results/density-alpha-sweep-2026-09-30/figures/grid-time-t20000-prelim.png)
-  and for [alpha 0.75 to 1 in finer steps](results/density-alpha-sweep-2026-09-30/figures/grid-time-refine-t20000-prelim.png).
-- [Condensate size vs box size](results/density-alpha-sweep-2026-09-30/figures/condensate-vs-box-size-t20000.png)
-  at fixed average density 2.4, box side 90 / 120 / 180 / 240. N_c is the largest
-  number of particles in one channel of one site. Its late mean goes
-  91 → 170 → 700 → 1887 at alpha 0.9 and 24 → 30 → 40 → 69 at alpha 1.
+Question: for which alpha the cluster density keeps growing when we put more particles.
+The alignment field is divided by M^alpha, with M the number of particles that
+contribute to the field. Alpha 0 is the original sum, alpha 1 is the average. I use
+polar bosons, field from the centre site and its 6 neighbours, sensitivity 6.
+Definitions in [docs/PHYSICS.md](docs/PHYSICS.md).
 
-Curves are seed means (5 seeds; 3 for the finer alphas) up to 20,000 steps. The
-numbers behind every figure are in the [study folder](results/density-alpha-sweep-2026-09-30/)
-as CSV files, and `build/figures.py` redraws the figures from them.
+- [Cluster density vs time for alpha 0.8, 0.85, 0.9, 1](results/density-alpha-sweep-2026-09-30/figures/focus-transition-t20000-prelim.png).
+  Each curve is one starting density (12 of them, 0.15 to 14.4 particles per site),
+  box 90×90. In the top row the time axis is linear until step 500 and log after, to
+  see the first growth.
+- Same curves for all the alphas: [0 to 1](results/density-alpha-sweep-2026-09-30/figures/grid-time-t20000-prelim.png),
+  and [0.75 to 1 more fine](results/density-alpha-sweep-2026-09-30/figures/grid-time-refine-t20000-prelim.png).
+- [Condensate size vs box size](results/density-alpha-sweep-2026-09-30/figures/condensate-vs-box-size-t20000.png),
+  density fixed at 2.4 particles per site, box side 90, 120, 180, 240. N_c is the
+  max number of particles in one channel of one site, like in the 2023 paper. The late
+  value goes 91 → 170 → 700 → 1887 for alpha 0.9, and 24 → 30 → 40 → 69 for alpha 1.
+
+Curves are the mean over seeds (5, or 3 for the finer alphas), runs of 20,000 steps.
+The numbers of each figure are in CSV files in the [study folder](results/density-alpha-sweep-2026-09-30/),
+and `build/figures.py` makes the figures again from them.
 
 ## Resumen
 
-LGCA Lab es una versión en JavaScript de `lgca_clean-1.cpp` que reproduce el
-programa en C++ estado por estado (verificado en 10 escenarios); se abre en el
-navegador sin instalar nada. El estudio del 30 de septiembre pregunta para qué alpha la densidad del cúmulo
-sigue creciendo al aumentar el número de partículas. Las figuras muestran la
-densidad del cúmulo contra el tiempo para 12 densidades iniciales y el tamaño del
+LGCA Lab es el código en C++ pasado a JavaScript; con la misma semilla da la misma red
+en cada paso y los mismos números aleatorios (lo compruebo en 10 casos). Se abre en el
+navegador, sin instalar nada. El estudio del 30 de septiembre busca para qué alpha la
+densidad del cúmulo sigue creciendo al meter más partículas: las figuras son la
+densidad del cúmulo contra el tiempo para 12 densidades iniciales, y el tamaño del
 condensado N_c contra el tamaño de la caja.

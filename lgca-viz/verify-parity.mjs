@@ -1,13 +1,8 @@
 #!/usr/bin/env node
 
-/*
- * State-for-state regression test for lgca-lab.html.
- *
- * The test compiles an instrumented copy of the actual lgca_clean-1.cpp source
- * in a temporary directory, then compares the C++ and JavaScript lattice,
- * WELL1024a state, particle conservation, exclusion invariant, and observables.
- * No generated source or binary is left in the repository.
- */
+// Compares lgca-lab.html with the C++: compiles a copy of lgca_clean-1.cpp with
+// prints added (in a temp folder), runs both, and checks lattice, WELL1024a state,
+// conservation, fermion exclusion and observables.
 
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";

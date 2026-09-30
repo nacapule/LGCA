@@ -1,63 +1,50 @@
 # LGCA
 
-Hexagonal lattice-gas cellular automaton for self-propelled particles, with
-fermion (exclusion, polar alignment) and boson (unbounded occupancy) variants.
-The reference code is `lgca/lgca_clean-1.cpp`, with the WELL1024a generator in
-`rng/` and CImg in `CImg/` for the optional display build. Those files are
-unchanged from the upstream repository.
+Hexagonal lattice-gas cellular automaton. The reference code is
+`lgca/lgca_clean-1.cpp`, with the WELL1024a generator in `rng/` and CImg in
+`CImg/` for the display build; those files are unchanged from the upstream
+repository. This fork adds a browser version of the model and one study.
 
 ## LGCA Lab
 
-`lgca-viz/lgca-lab.html` is a JavaScript port of `lgca_clean-1.cpp` in a single
-HTML file. With the same seed and settings it reproduces the C++ run state for
-state: the same lattice at every step and the same random-number stream. To use
-it, open `lgca-viz/lgca-lab.html` in a browser. Nothing needs to be installed.
+[Open LGCA Lab](https://nacapule.github.io/LGCA/lgca-viz/lgca-lab.html), or open
+`lgca-viz/lgca-lab.html` locally; nothing needs to be installed. It is a
+JavaScript port of the C++ that reproduces it state for state: with the same seed
+and settings, the parity check below finds the same lattice and the same
+random-number stream. Its defaults are the C++ defaults. The alpha
+normalization and the centre-plus-neighbours field used in the study are extra
+options, off by default.
 
-The default settings are the C++ defaults. The extra options I added for the
-studies below (for example the alpha normalization and the boson field that
-includes the centre site) are separate toggles and do not change the default
-dynamics. `docs/PHYSICS.md` describes the model and the observables,
-`docs/FIDELITY.md` explains what exact agreement means and how it is checked,
-and `docs/ARCHITECTURE.md` describes how the tool is built.
+Parity check (needs Node.js and a C++ compiler): `node lgca-viz/verify-parity.mjs`
+compiles the C++ and compares every lattice value and the full RNG state with the
+JavaScript engine in 10 scenarios. See [docs/FIDELITY.md](docs/FIDELITY.md).
 
-### Checking parity with the C++
+## Study: density × alpha (September 30)
 
-```
-cd lgca-viz && node verify-parity.mjs
-```
+For which alpha does the cluster density keep growing as the number of particles
+grows? The alignment field is divided by M^alpha, where M is the number of
+particles contributing to it: alpha 0 is the plain sum, alpha 1 the average.
+Setting: polar bosons, field from the centre site plus its six neighbours,
+sensitivity 6. Definitions are in [docs/PHYSICS.md](docs/PHYSICS.md).
 
-This needs `node` and a C++ compiler (`c++`). The script compiles the actual
-`lgca_clean-1.cpp`, runs 10 scenarios (fermions and bosons, several seeds,
-sensitivities and densities), and compares every lattice value, the full RNG
-state and the printed observables against the JavaScript engine. It ends with
-"All 10 C++/JavaScript parity scenarios passed." `verify-alpha.mjs` and
-`verify-neighbourhood.mjs` check the alpha and centre-site options in the same
-way.
+- [Cluster density vs time at alpha 0.8 / 0.85 / 0.9 / 1](results/density-alpha-sweep-2026-09-30/figures/focus-transition-t20000-prelim.png):
+  one panel per alpha, one curve per starting density (12 densities, 90×90 box).
+- The same curves for [alpha 0 to 1](results/density-alpha-sweep-2026-09-30/figures/grid-time-t20000-prelim.png)
+  and for [alpha 0.75 to 1 in finer steps](results/density-alpha-sweep-2026-09-30/figures/grid-time-refine-t20000-prelim.png).
+- [Condensate size vs box size](results/density-alpha-sweep-2026-09-30/figures/condensate-vs-box-size-t20000.png)
+  at fixed average density 2.4, box side 90 / 120 / 180 / 240. N_c is the largest
+  number of particles in one channel of one site. Its late mean goes
+  91 → 170 → 700 → 1887 at alpha 0.9 and 24 → 30 → 40 → 69 at alpha 1.
 
-## Studies
-
-| Date | Study | What it shows |
-|---|---|---|
-| Sep 10 | [Snapshot table](snapshot-table/tabla-snapshots.html) ([compare two rows](snapshot-table/compare.html)) | Coarse survey of model settings at density 0.4 on a 180×180 lattice, sensitivities 0.5 / 2 / 6, snapshots up to t = 10,000 |
-| Sep 24 | [Alpha pilot](results/alpha-2026-09-24/index.html) | Normalization interpolating between SUM (alpha = 0) and AVERAGE (alpha = 1) for polar bosons; 60 runs, sizes 60 to 180, up to 10,000 steps |
-| Sep 25 | [Alpha box-size refinement](results/alpha-refinement-2026-09-25/index.html) | Cluster density (mass / area) against time and box size for alpha 0.75 to 0.90; sizes 90 / 120 / 180, five seeds, 80,000 steps |
-| Sep 25 | [Density vs time, with the centre site](results/density-2026-09-25/METHODS.md) | Four mean densities at alpha 0.8 / 0.9 / 1 with the centre site included in the field; the plots are in the refinement page above (Compare: mean densities) |
-| Sep 30 | [Density × alpha sweep](results/density-alpha-sweep-2026-09-30/figures/) (in progress) | Twelve densities across alpha 0 to 1, with box-size runs and edge profiles; figures are updated as the runs finish |
-
-Each results folder has the report page or figures, a `METHODS.md` where
-available, and the aggregate measurements (CSV and JSON). The raw saved lattice
-states from the individual runs are not included because of their size; the
-settings, seeds and scripts used to produce them are in each `METHODS.md` and
-`build/` folder.
+Curves are seed means (5 seeds; 3 for the finer alphas) up to 20,000 steps. The
+numbers behind every figure are in the [study folder](results/density-alpha-sweep-2026-09-30/)
+as CSV files, and `build/figures.py` redraws the figures from them.
 
 ## Resumen
 
-LGCA Lab (`lgca-viz/lgca-lab.html`) es una versión en JavaScript de
-`lgca_clean-1.cpp` que reproduce el programa en C++ estado por estado: con la
-misma semilla da la misma red en cada paso y la misma secuencia de números
-aleatorios. Se abre directamente en el navegador. La paridad se comprueba con
-`cd lgca-viz && node verify-parity.mjs` (requiere node y un compilador de C++).
-La tabla de arriba enlaza los estudios: la tabla de snapshots (10 sep), el
-piloto de alpha (24 sep), el refinamiento por tamaño de caja (25 sep), la
-densidad contra el tiempo con el sitio central (25 sep) y el barrido de
-densidad × alpha (30 sep, en curso).
+LGCA Lab es una versión en JavaScript de `lgca_clean-1.cpp` que reproduce el
+programa en C++ estado por estado (verificado en 10 escenarios); se abre en el
+navegador sin instalar nada. El estudio del 30 de septiembre pregunta para qué alpha la densidad del cúmulo
+sigue creciendo al aumentar el número de partículas. Las figuras muestran la
+densidad del cúmulo contra el tiempo para 12 densidades iniciales y el tamaño del
+condensado N_c contra el tamaño de la caja.

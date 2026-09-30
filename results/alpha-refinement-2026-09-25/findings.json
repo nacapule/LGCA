@@ -1,8 +1,0 @@
-{
-  "horizon": 80000,
-  "finding": "Alpha 0.80 remains strongly concentrated. Alpha 0.90 spreads out substantially, but its largest-box density remains above the smaller boxes. These runs do not establish a critical alpha.",
-  "interpretation": "Averaging steps 60,100\u201380,000: \u03b1 = 0.80 gives 137 \u2192 198 \u2192 261 particles/site as size increases; \u03b1 = 0.90 gives 6.7 \u2192 6.9 \u2192 15.2. A clean, size-independent density ceiling has not been established for \u03b1 = 0.90.",
-  "timeNote": "All 60 runs reach 80,000 steps. Alpha 0.85 remains variable and still evolves strongly in some conditions. In the largest alpha 0.90 box, some seeds grow denser while others become less dense; a nearly flat ensemble mean can hide those changes. No further extension is included in this sweep.",
-  "thresholdNote": "At step 80,000, thresholds of 1.5\u00d7 and 4\u00d7 the mean retain the strong density contrast between alpha 0.80 and 0.90. The absolute densities change with the definition. These checks do not resolve the long-time or infinite-size limit.",
-  "analysisSha256": "88359a5baf70f64088ca8e0d9013dc00288b861c63c62357e922e62072072c8d"
-}

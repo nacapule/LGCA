@@ -12,18 +12,19 @@ and the results of the alpha study we talked about in September.
 Open it here: https://nacapule.github.io/LGCA/lgca-viz/lgca-lab.html, or open
 `lgca-viz/lgca-lab.html` directly.
 
-The Lab is the C++ translated to JavaScript, random generator included, so with the
-same seed and the same parameters it gives the same lattice in every step and the same
-random numbers than the C++. Default parameters are the ones of the C++. The alpha
+The Lab runs the C++ model in the browser. By default it uses a C++ version of the
+engine, the same code reorganised so the lattice size and the model are chosen when it
+runs, compiled to WebAssembly. A translation to JavaScript is the fallback when the
+browser cannot run WebAssembly. Both include the random generator, so with the same seed
+and the same parameters they give the same lattice in every step and the same random
+numbers than the C++. Default parameters are the ones of the C++. The alpha
 normalization and the field with centre site + 6 neighbours are options added for
-the study. By default the Lab runs a C++ version of the engine compiled to WebAssembly,
-which is faster and gives the same lattices; the JavaScript is used when the browser
-cannot run WebAssembly. One change on purpose: the band order parameter counts all six
-channels (the C++ skips channel 0); this changes only the band value, not the dynamics.
+the study. One change on purpose: the band order parameter counts all six channels
+(the C++ skips channel 0); this changes only the band value, not the dynamics.
 
 To check it against the C++: `node lgca-viz/verify-parity.mjs` (needs Node.js and a
 C++ compiler). It compiles the C++ and compares the whole lattice and the full state of
-the random generator with the JavaScript, in 10 cases with fermions and bosons,
+the random generator with the JavaScript version, in 10 cases with fermions and bosons,
 different seeds, densities and sensitivities. More detail in [docs/FIDELITY.md](docs/FIDELITY.md).
 
 ## Alpha study (Sep 30)
@@ -51,12 +52,12 @@ and `build/figures.py` makes the figures again from them.
 
 ## Resumen
 
-LGCA Lab es el código en C++ pasado a JavaScript; con la misma semilla da la misma red
-en cada paso y los mismos números aleatorios (lo comprobamos en 10 casos). Por defecto
-corre una versión en C++ del motor compilada a WebAssembly, más rápida y con las mismas
-redes; si el navegador no puede, usa la de JavaScript. Un cambio a propósito: el
-parámetro de orden de bandas cuenta los seis canales (el C++ se salta el canal 0); solo
-cambia ese valor, no la dinámica. Se abre en el navegador, sin instalar nada. El estudio más reciente busca para qué alpha la
+LGCA Lab corre en el navegador el modelo del código en C++: por defecto, una versión en
+C++ del motor compilada a WebAssembly; si el navegador no puede, una traducción a
+JavaScript. Con la misma semilla dan la misma red en cada paso y los mismos números
+aleatorios que el C++ (lo comprobamos en 10 casos). Un cambio a propósito: el parámetro
+de orden de bandas cuenta los seis canales (el C++ se salta el canal 0); solo cambia ese
+valor, no la dinámica. Se abre en el navegador, sin instalar nada. El estudio más reciente busca para qué alpha la
 densidad del cúmulo sigue creciendo al meter más partículas: las figuras son la
 densidad del cúmulo contra el tiempo para 12 densidades iniciales, y el tamaño del
 condensado N_c contra el tamaño de la caja.

@@ -16,7 +16,10 @@ The Lab is the C++ translated to JavaScript, random generator included, so with 
 same seed and the same parameters it gives the same lattice in every step and the same
 random numbers than the C++. Default parameters are the ones of the C++. The alpha
 normalization and the field with centre site + 6 neighbours are options added for
-the study.
+the study. By default the Lab runs a C++ version of the engine compiled to WebAssembly,
+which is faster and gives the same lattices; the JavaScript is used when the browser
+cannot run WebAssembly. One change on purpose: the band order parameter counts all six
+channels (the C++ skips channel 0); this changes only the band value, not the dynamics.
 
 To check it against the C++: `node lgca-viz/verify-parity.mjs` (needs Node.js and a
 C++ compiler). It compiles the C++ and compares the whole lattice and the full state of

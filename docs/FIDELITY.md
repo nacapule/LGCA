@@ -16,6 +16,11 @@ checks that particles are conserved, the fermion exclusion, the replay, the HTML
 the default values of the interface. When all is good it ends with:
 "All 10 C++/JavaScript parity scenarios passed."
 
+One change on purpose (October 1): the band order parameter counts all six channels.
+The C++ starts its loop at channel 1, so it skips channel 0 and the band depends on the
+direction the particles prefer. This changes only the printed band, not the dynamics;
+the script applies the same one-line change to its copy of the C++.
+
 The 10 cases use the C++ settings. Alpha and centre + neighbours are options outside
 the C++ model and are off by default. Between different computers the exact trajectory
 can change if exp/log round different and this changes one decision just at the limit.

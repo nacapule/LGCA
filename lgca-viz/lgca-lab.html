@@ -579,7 +579,7 @@ class LGCA {
       for(let k=1;k<5;k++){
         const idx=[[(i+k)%W,j],[(i+k)%W,(j-k+H)%H],[i,(j-k+H)%H],
                    [(i-k+W)%W,j],[(i-k+W)%W,(j+k)%H],[i,(j+k)%H]];
-        for(let m=1;m<6;m++){
+        for(let m=0;m<6;m++){   /* all six channels; the C++ starts at 1 (FIDELITY.md, "Deliberate deviation") */
           for(let d=0;d<6;d++){
             const o=occ[(idx[d][1]*W+idx[d][0])*6+m];
             x3+=o*(2*CX[d]*CX[d]-1); y3+=o*(2*CX[d]*CY[d]); nband+=o;
@@ -632,6 +632,338 @@ function dumpState(o){
 if(typeof window!=="undefined"){ window.runBatch=runBatch; window.dumpState=dumpState; }
 </script>
 
+<script id="workerSrc">
+"use strict";
+/* ======================= simulation worker =======================
+   The Lab steps the simulation in a Web Worker, so a slow step (a 360x360 fermion
+   lattice needs about 130 ms per step) never freezes the page. This block is loaded
+   twice: once here on the main thread, and once inside the worker, which is built
+   from the text of the engine block followed by this block (the page stays one
+   self-contained file; nothing is fetched). The main thread uses the two helpers
+   directly and keeps simWorkerMain as the fallback when no worker can be started.
+
+   Two engines can run here, chosen by `params.engine` in each init request (the page
+   asks for "wasm" unless ?engine=js in its URL or labEngine("js") on its console, both
+   developer paths, says "js"; the page offers no control for it):
+     "js"    class LGCA of the engine block (also when a request names no engine);
+     "wasm"  the same C++ engine compiled to WebAssembly (native/lgca_engine.* and
+             native/wasm/lgca_wasm.cpp), whose Emscripten loader the page carries as
+             the text of the wasmEngine block (a script element of type text/plain,
+             which the browser does not run), written there by native/inline-wasm.mjs. Class WasmSim below gives it LGCA's interface, so the
+             code that follows drives both alike. Same seed and settings, same states:
+             lgca-viz/verify-parity-wasm.mjs checks it against the reference C++.
+   The WebAssembly module loads on the first init that asks for it; requests arriving
+   meanwhile wait, in order. If it cannot load, or refuses the settings, the run uses
+   the JavaScript engine, and the init reply says so (`engine`, `engineNote`). A failed
+   load is not tried again on every init, only on one that carries `retryWasm` (the page
+   sends it when WebAssembly is chosen anew with labEngine("wasm")).
+
+   Requests (main thread -> worker); every request carries `seq` and `epoch`:
+     init  {params, cfg, band, bufs, retryWasm}
+                                      new engine, sample at t=0, one step, sample at t=1
+     step  {n, ms, cfg, band, bufs}   up to n steps, stopping after ms milliseconds
+                                      (always at least one step)
+     jump  {k, bufs}                  true rewind to buffered tick k: lattice + RNG state
+     slot  {k, buf}                   copy of the buffered post-collision lattice at tick k
+     frame {bufs}                     the current lattice, no stepping
+   `cfg` carries the live physics controls (sensitivity, kernel, alpha, field,
+   alignment); `band` says whether to compute the band order every 10 steps. `bufs`
+   are two ArrayBuffers the worker fills with copies of `src` (post-collision) and
+   `occ` (streamed) and transfers back, so nothing is allocated per frame.
+
+   Replies echo `type`, `seq`, `epoch` and carry the state after the request: `t`,
+   `nuparts`, `rng` (33 words), `m` (measure()), `rho` (densityStats of occ), `range`
+   (oldest and newest buffered tick), `records` (one chart sample per step done),
+   `did` (steps done) and, when `bufs` were sent, `src` and `occ` at tick `frameT`;
+   the init reply also names the engine that runs (`engine`, and `engineNote` when
+   it is not the one asked for).
+   None of this touches the random stream: measuring, copying and messaging draw
+   nothing, so the dynamics are exactly those of the engine block. */
+
+/* Display-only density diagnostics of a lattice array; consumes no random draws. */
+function densityStats(arr){
+  let N=0,max=0,maxChannel=0,sum2=0,occupied=0;
+  for(let b=0;b<arr.length;b+=6){
+    let n=0; for(let k=0;k<6;k++){ n+=arr[b+k]; maxChannel=Math.max(maxChannel,arr[b+k]); }
+    N+=n; max=Math.max(max,n); sum2+=n*n; if(n) occupied++;
+  }
+  return {N,max,maxChannel,occupied,mean:N/(arr.length/6),fraction:N?max/N:0,effectiveArea:sum2?N*N/sum2:0};
+}
+
+/* Streaming applied to a post-collision lattice: channel k moves one site along
+   DST[k]. Every entry of `occ` is written, so it needs no clearing first. */
+function streamInto(src,occ,W,H){
+  for(let i=0;i<W;i++) for(let j=0;j<H;j++){
+    const b=(j*W+i)*6;
+    for(let k=0;k<6;k++){
+      const X=(i+DST[k][0]+W)%W, Y=(j+DST[k][1]+H)%H;
+      occ[(Y*W+X)*6+k]=src[b+k];
+    }
+  }
+}
+
+/* ---- the WebAssembly engine ----
+   Its C functions (native/wasm/lgca_wasm.cpp documents each) take plain numbers, and
+   the options as codes: */
+const WASM_CODES={model:{fermion:0,boson:1}, kernel:{sum:0,avg:1,power:2},
+                  bosonField:{site:0,neigh:1,both:2}, bosonAlign:{nematic:0,polar:1}};
+function wasmCode(what,value){
+  if(!Object.prototype.hasOwnProperty.call(WASM_CODES[what],value)) throw new RangeError("unknown "+what+": "+value);
+  return WASM_CODES[what][value];
+}
+
+/* Evaluate the loader text (a classic script defining createLgcaWasm) and start one
+   module instance. Resolves to {module, rngPtr, measurePtr}: the module and two
+   scratch areas in its memory, for the generator state (33 words) and the
+   measurements (5 doubles). The loader is evaluated inside a function body of its own,
+   so it neither runs in this block's strict mode nor leaves names behind. */
+function loadWasmEngine(glue){
+  return new Promise(resolve=>{
+    if(typeof WebAssembly!=="object") throw new Error("this browser has no WebAssembly");
+    if(!glue) throw new Error("the page has no wasmEngine block");
+    const factory=new Function(glue+"\nreturn createLgcaWasm;")();
+    resolve(factory());
+  }).then(module=>{
+    const rngPtr=module._malloc(33*4), measurePtr=module._malloc(5*8);
+    if(!rngPtr||!measurePtr) throw new Error("no memory for the engine's scratch space");
+    return {module,rngPtr,measurePtr};
+  });
+}
+
+/* The WebAssembly engine behind LGCA's interface: the fields and methods the worker
+   uses (model, W, H, t, nuparts, occ, src, rng.getState/setState, step, measure,
+   band, and the four live options), with the same values. One module holds one
+   engine: a new WasmSim replaces the previous one, and destroy() frees it.
+     occ, src   views on the engine's own lattices, made afresh at every access (the
+                module's memory can grow, which replaces its buffer). Writing through
+                them writes the engine's lattice: the replay below restores a saved
+                state this way, as it does for LGCA.
+     t, nuparts settable, for that replay.
+     rng        getState() returns a copy (the worker transfers it); setState(words)
+                loads 33 words: 32 state words, then the index. */
+class WasmSim {
+  constructor(wasm,o){
+    const M=wasm.module;
+    this.M=M; this.wasm=wasm;
+    this.model=o.model; this.W=o.W; this.H=o.H; this.dens=o.dens; this.initialSeed=o.seed;
+    /* LGCA's defaults, read the way its constructor reads them */
+    this.opt={kernel:o.kernel||"sum", alpha:Number.isFinite(o.alpha)?o.alpha:0,
+              bosonField:o.bosonField||"site", bosonAlign:o.bosonAlign||"nematic"};
+    const c=this.opt;
+    if(!M._lgca_create(o.W,o.H,wasmCode("model",o.model),o.dens,o.seed>>>0,wasmCode("kernel",c.kernel),c.alpha,
+                       wasmCode("bosonField",c.bosonField),wasmCode("bosonAlign",c.bosonAlign)))
+      throw new RangeError(M.UTF8ToString(M._lgca_error()));
+    this.cells=M._lgca_cell_count();
+    this.rng={
+      getState(){ M._lgca_get_rng(wasm.rngPtr); return new Uint32Array(M.HEAPU32.buffer,wasm.rngPtr,33).slice(); },
+      setState(words){ new Uint32Array(M.HEAPU32.buffer,wasm.rngPtr,33).set(words.subarray(0,33)); M._lgca_set_rng(wasm.rngPtr); }
+    };
+  }
+  get occ(){ return new Int32Array(this.M.HEAP32.buffer,this.M._lgca_occ_ptr(),this.cells); }
+  get src(){ return new Int32Array(this.M.HEAP32.buffer,this.M._lgca_src_ptr(),this.cells); }
+  get t(){ return this.M._lgca_t(); }
+  set t(v){ if(typeof v!=="number"||!this.M._lgca_set_t(v)) throw new RangeError("t must be an integer from 0 to 2^53"); }
+  get nuparts(){ return this.M._lgca_nuparts(); }
+  set nuparts(v){ if(typeof v!=="number"||!this.M._lgca_set_nuparts(v)) throw new RangeError("nuparts must be an integer of size at most 2^53"); }
+  /* the live options: as for LGCA, a change acts from the next step on */
+  get kernel(){ return this.opt.kernel; }
+  set kernel(v){ this.setOptions({kernel:v}); }
+  get alpha(){ return this.opt.alpha; }
+  set alpha(v){ this.setOptions({alpha:v}); }
+  get bosonField(){ return this.opt.bosonField; }
+  set bosonField(v){ this.setOptions({bosonField:v}); }
+  get bosonAlign(){ return this.opt.bosonAlign; }
+  set bosonAlign(v){ this.setOptions({bosonAlign:v}); }
+  setOptions(changes){
+    const c=Object.assign({},this.opt,changes);
+    if(typeof c.alpha!=="number"||!this.M._lgca_set_options(wasmCode("kernel",c.kernel),c.alpha,
+         wasmCode("bosonField",c.bosonField),wasmCode("bosonAlign",c.bosonAlign)))
+      throw new RangeError("alpha must be a number from 0 to 2");
+    this.opt=c;
+  }
+  step(sens){ this.M._lgca_step(1,sens); }
+  initLattice(){ this.M._lgca_init_lattice(); }
+  /* LGCA's measure(): the engine gives polar, nematic, entropy, 1/occupied and the
+     number of occupied sites; spatial and occFrac follow with LGCA's own expressions
+     (its entropy is -S, so 1-(-S)/log(W*H) is 1-entropy/log(W*H)) */
+  measure(){
+    const M=this.M, p=this.wasm.measurePtr;
+    M._lgca_measure(p);
+    const m=new Float64Array(M.HEAPF64.buffer,p,5);
+    return {polar:m[0],nematic:m[1],entropy:m[2],spatial:1-m[2]/Math.log(this.W*this.H),
+            occFrac:m[4]/(this.W*this.H),invOcc:m[3]};
+  }
+  band(){ return this.M._lgca_band(); }
+  destroy(){ this.M._lgca_destroy(); }
+}
+
+/* The worker program. `port` is the worker's global scope, or a MessagePort when the
+   same code runs on the main thread as the fallback. `wasmGlue` is the text of the
+   wasmEngine block ("" or absent: only the JavaScript engine can run). */
+function simWorkerMain(port,wasmGlue){
+  let sim=null, lastM=null, lastRho=null;
+  /* the WebAssembly module: loaded on the first init that asks for it; after a failed
+     load, again for an init that carries retryWasm (one attempt per request: triedFor) */
+  let wasm=null, wasmFailed="", waiting=null, triedFor=null;
+  function needsLoad(msg){
+    return msg.type==="init"&&msg.params.engine==="wasm"&&!wasm&&msg!==triedFor&&(!wasmFailed||msg.retryWasm);
+  }
+  /* the engine for an init request, and a note when it is not the one asked for */
+  function makeSim(params){
+    if(params.engine!=="wasm") return {sim:new LGCA(params),engine:"js"};
+    if(!wasm) return {sim:new LGCA(params),engine:"js",
+                      note:"the WebAssembly engine could not load ("+wasmFailed+"); the JavaScript engine runs instead"};
+    try{ return {sim:new WasmSim(wasm,params),engine:"wasm"}; }
+    catch(err){
+      return {sim:new LGCA(params),engine:"js",
+              note:"the WebAssembly engine refused these settings ("+err.message+"); the JavaScript engine runs instead"};
+    }
+  }
+  /* replay ring buffer of post-collision states, RNG states and ticks (about 24 MB) */
+  let rb=null;
+  function newRing(){
+    const cap=Math.min(300,Math.max(20,Math.floor(24e6/(sim.W*sim.H*6*4))));
+    rb={slots:new Array(cap),rng:new Array(cap),ticks:new Int32Array(cap),cap,len:0,head:0};
+  }
+  function pushReplay(){
+    const i=rb.head;
+    if(!rb.slots[i]) rb.slots[i]=new Int32Array(sim.W*sim.H*6);
+    rb.slots[i].set(sim.src);
+    if(!rb.rng[i]) rb.rng[i]=new Uint32Array(33);
+    rb.rng[i].set(sim.rng.getState());
+    rb.ticks[i]=sim.t;
+    rb.head=(rb.head+1)%rb.cap;
+    if(rb.len<rb.cap) rb.len++;
+  }
+  function ringIndex(tick){
+    for(let q=0;q<rb.len;q++){
+      const i=(rb.head-1-q+rb.cap*2)%rb.cap;
+      if(rb.ticks[i]===tick) return i;
+    }
+    return -1;
+  }
+  function replayRange(){
+    if(rb.len===0) return [sim.t,sim.t];
+    const newest=rb.ticks[(rb.head-1+rb.cap)%rb.cap];
+    const oldest=rb.ticks[(rb.head-rb.len+rb.cap*2)%rb.cap];
+    return [oldest,newest];
+  }
+  /* live physics controls; changing them during a run is a deliberate branch */
+  function applyCfg(cfg){
+    sim.kernel=cfg.kernel; sim.alpha=cfg.alpha;
+    sim.bosonField=cfg.bosonField; sim.bosonAlign=cfg.bosonAlign;
+  }
+  /* the settings recorded with each chart sample (they go into the CSV export) */
+  function cfgEntry(cfg){
+    const fermion=sim.model==="fermion";
+    return {sens:cfg.sens, alpha:cfg.kernel==="sum"?0:cfg.kernel==="avg"?1:cfg.alpha, kernel:cfg.kernel,
+            field:fermion?"neigh":cfg.bosonField, alignment:fermion?"polar":cfg.bosonAlign};
+  }
+  /* one chart sample for the current tick */
+  function record(cfg,band){
+    const m=sim.measure();
+    lastM=m; lastRho=densityStats(sim.occ);
+    const rec={t:sim.t,polar:m.polar,nematic:m.nematic,spatial:m.spatial,rho:lastRho,cfg:cfgEntry(cfg)};
+    if(band && sim.t%10===0) rec.band=sim.band();
+    return rec;
+  }
+  /* answer with the state after the request; fill and transfer the lattice buffers if given */
+  function reply(msg,extra,bufs){
+    const out=Object.assign({type:msg.type,seq:msg.seq,epoch:msg.epoch,t:sim.t,nuparts:sim.nuparts,
+      rng:sim.rng.getState(),m:lastM,rho:lastRho,range:replayRange()},extra);
+    const transfer=[out.rng.buffer];
+    if(bufs){
+      const bytes=sim.W*sim.H*6*4;
+      const src=bufs.src&&bufs.src.byteLength===bytes?new Int32Array(bufs.src):new Int32Array(bytes/4);
+      const occ=bufs.occ&&bufs.occ.byteLength===bytes?new Int32Array(bufs.occ):new Int32Array(bytes/4);
+      src.set(sim.src); occ.set(sim.occ);
+      out.src=src; out.occ=occ; out.frameT=sim.t;
+      transfer.push(src.buffer,occ.buffer);
+    }
+    port.postMessage(out,transfer);
+  }
+  function handle(msg){
+    if(msg.type==="init"){
+      /* a WebAssembly engine is freed first: its module can hold only one */
+      if(sim&&sim.destroy){ sim.destroy(); sim=null; }
+      const made=makeSim(msg.params);
+      sim=made.sim;
+      applyCfg(msg.cfg);
+      const records=[record(msg.cfg,msg.band)];
+      sim.step(msg.cfg.sens);
+      records.push(record(msg.cfg,msg.band));
+      newRing(); pushReplay();
+      reply(msg,{records,engine:made.engine,engineNote:made.note||""},msg.bufs);
+    } else if(msg.type==="step"){
+      applyCfg(msg.cfg);
+      const records=[], t0=performance.now();
+      let did=0;
+      while(did<msg.n && (did===0 || performance.now()-t0<msg.ms)){
+        sim.step(msg.cfg.sens);
+        records.push(record(msg.cfg,msg.band));
+        pushReplay();
+        did++;
+      }
+      reply(msg,{records,did},msg.bufs);
+    } else if(msg.type==="jump"){
+      const i=ringIndex(msg.k);
+      if(i<0){ reply(msg,{ok:false},msg.bufs); return; }
+      streamInto(rb.slots[i],sim.occ,sim.W,sim.H);
+      sim.src.set(rb.slots[i]);
+      sim.rng.setState(rb.rng[i]);
+      sim.t=msg.k;
+      const newest=rb.ticks[(rb.head-1+rb.cap)%rb.cap], drop=newest-msg.k;
+      if(drop>0){ rb.head=(rb.head-drop+rb.cap)%rb.cap; rb.len-=drop; }
+      lastM=sim.measure(); lastRho=densityStats(sim.occ);
+      reply(msg,{ok:true,k:msg.k},msg.bufs);
+    } else if(msg.type==="slot"){
+      const i=ringIndex(msg.k), bytes=sim.W*sim.H*6*4;
+      const src=msg.buf&&msg.buf.byteLength===bytes?new Int32Array(msg.buf):new Int32Array(bytes/4);
+      let rng=null;
+      if(i>=0){ src.set(rb.slots[i]); rng=new Uint32Array(rb.rng[i]); }
+      port.postMessage({type:"slot",seq:msg.seq,epoch:msg.epoch,k:i>=0?msg.k:null,src,rng},
+                       rng?[src.buffer,rng.buffer]:[src.buffer]);
+    } else if(msg.type==="frame"){
+      reply(msg,{},msg.bufs);
+    }
+  }
+  /* Requests are handled in arrival order. While the WebAssembly module loads they
+     wait in `waiting` (a request that needs the module waits at its head); then each
+     runs in a task of its own, as a message would, so an error in one still reaches
+     the page (worker error event) and the next runs. */
+  function drain(){
+    if(!waiting.length){ waiting=null; return; }
+    const msg=waiting[0];
+    if(needsLoad(msg)){
+      triedFor=msg;
+      loadWasmEngine(wasmGlue)
+        .then(w=>{ wasm=w; wasmFailed=""; },err=>{ wasmFailed=String(err&&err.message||err)||"unknown error"; })
+        .then(()=>setTimeout(drain,0));
+      return;
+    }
+    waiting.shift();
+    setTimeout(drain,0);
+    handle(msg);
+  }
+  port.onmessage=function(e){
+    const msg=e.data;
+    if(waiting){ waiting.push(msg); return; }
+    if(needsLoad(msg)){ waiting=[msg]; drain(); return; }
+    handle(msg);
+  };
+  port.postMessage({type:"hello"});
+}
+</script>
+
+<!-- wasmEngine: generated by native/inline-wasm.mjs from native/build/lgca_wasm.js
+     (60574 bytes, sha256 703fde469b8b505b204912672d6f2f6ef0e2c205466ad02f870e4caf906ed211).
+     A build output: do not edit by hand. To rebuild after an engine change:
+     bash native/build-wasm.sh && node native/inline-wasm.mjs -->
+<script id="wasmEngine" type="text/plain">
+var createLgcaWasm=(()=>{var _scriptName=globalThis.document?.currentScript?.src;return async function(moduleArg={}){var Module=moduleArg;var ENVIRONMENT_IS_WEB=!!globalThis.window;var ENVIRONMENT_IS_WORKER=!!globalThis.WorkerGlobalScope;var ENVIRONMENT_IS_NODE=globalThis.process?.versions?.node&&globalThis.process?.type!="renderer";var programArgs=[];var thisProgram="./this.program";var quit_=(status,toThrow)=>{throw toThrow};if(typeof __filename!="undefined"){_scriptName=__filename}else if(ENVIRONMENT_IS_WORKER){_scriptName=self.location.href}var scriptDirectory="";var readAsync,readBinary;if(ENVIRONMENT_IS_NODE){var fs=require("node:fs");scriptDirectory=__dirname+"/";readBinary=filename=>{filename=isFileURI(filename)?new URL(filename):filename;var ret=fs.readFileSync(filename);return ret};readAsync=async(filename,binary=true)=>{filename=isFileURI(filename)?new URL(filename):filename;var ret=fs.readFileSync(filename,binary?undefined:"utf8");return ret};if(process.argv.length>1){thisProgram=process.argv[1].replace(/\\/g,"/")}programArgs=process.argv.slice(2);quit_=(status,toThrow)=>{process.exitCode=status;throw toThrow}}else if(ENVIRONMENT_IS_WEB||ENVIRONMENT_IS_WORKER){try{scriptDirectory=new URL(".",_scriptName).href}catch{}{if(ENVIRONMENT_IS_WORKER){readBinary=url=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,false);xhr.responseType="arraybuffer";xhr.send(null);return new Uint8Array(xhr.response)}}readAsync=async url=>{var response=await fetch(url,{credentials:"same-origin"});if(response.ok){return response.arrayBuffer()}throw new Error(response.status+" : "+response.url)}}}else{}var out=console.log.bind(console);var err=console.error.bind(console);var wasmBinary;var ABORT=false;var isFileURI=filename=>filename.startsWith("file://");class EmscriptenEH{}class EmscriptenSjLj extends EmscriptenEH{}var runtimeInitialized=false;function getMemoryBuffer(){return wasmMemory.buffer}function updateMemoryViews(){if(HEAP8?.buffer?.resizable)return;var b=getMemoryBuffer();HEAP8=new Int8Array(b);Module["HEAPU8"]=HEAPU8=new Uint8Array(b);Module["HEAP32"]=HEAP32=new Int32Array(b);Module["HEAPU32"]=HEAPU32=new Uint32Array(b);Module["HEAPF64"]=HEAPF64=new Float64Array(b)}function preRun(){var preRun=Module["preRun"];if(preRun){if(typeof preRun=="function")preRun=[preRun];onPreRuns.push(...preRun)}callRuntimeCallbacks(onPreRuns)}function initRuntime(){runtimeInitialized=true;wasmExports["e"]()}function postRun(){var postRun=Module["postRun"];if(postRun){if(typeof postRun=="function")postRun=[postRun];onPostRuns.push(...postRun)}callRuntimeCallbacks(onPostRuns)}function abort(what){Module["onAbort"]?.(what);what=`Aborted(${what})`;err(what);ABORT=true;what+=". Build with -sASSERTIONS for more info.";var e=new WebAssembly.RuntimeError(what);throw e}var wasmBinaryFile;function findWasmBinary(){return base64Decode("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")}function getBinarySync(file){if(ArrayBuffer.isView(file)){return file}if(readBinary){return readBinary(file)}throw"both async and sync fetching of the wasm failed"}async function getWasmBinary(binaryFile){return getBinarySync(binaryFile)}async function instantiateArrayBuffer(binaryFile,imports){try{var binary=await getWasmBinary(binaryFile);var instance=await WebAssembly.instantiate(binary,imports);return instance}catch(reason){err(`failed to asynchronously prepare wasm: ${reason}`);abort(reason)}}async function instantiateAsync(binary,binaryFile,imports){return instantiateArrayBuffer(binaryFile,imports)}function getWasmImports(){var imports={a:wasmImports};return imports}async function createWasm(){function receiveInstance(instance){wasmExports=instance.exports;assignWasmExports(wasmExports);updateMemoryViews();return wasmExports}function receiveInstantiationResult(result){return receiveInstance(result["instance"])}var info=getWasmImports();var instantiateWasm=Module["instantiateWasm"];if(instantiateWasm){return new Promise(resolve=>{instantiateWasm(info,inst=>resolve(receiveInstance(inst)))})}wasmBinaryFile??=findWasmBinary();var result=await instantiateAsync(wasmBinary,wasmBinaryFile,info);var exports=receiveInstantiationResult(result);return exports}class ExitStatus{name="ExitStatus";constructor(status){this.message=`Program terminated with exit(${status})`;this.status=status}}var HEAP8;var callRuntimeCallbacks=callbacks=>{while(callbacks.length>0){callbacks.shift()(Module)}};var onPostRuns=[];var onPreRuns=[];var base64Decode=b64=>{if(ENVIRONMENT_IS_NODE){var buf=Buffer.from(b64,"base64");return new Uint8Array(buf.buffer,buf.byteOffset,buf.length)}var b1,b2,i=0,j=0,bLength=b64.length;var output=new Uint8Array((bLength*3>>2)-(b64[bLength-2]=="=")-(b64[bLength-1]=="="));for(;i<bLength;i+=4,j+=3){b1=base64ReverseLookup[b64.charCodeAt(i+1)];b2=base64ReverseLookup[b64.charCodeAt(i+2)];output[j]=base64ReverseLookup[b64.charCodeAt(i)]<<2|b1>>4;output[j+1]=b1<<4|b2>>2;output[j+2]=b2<<6|base64ReverseLookup[b64.charCodeAt(i+3)]}return output};var noExitRuntime=true;var HEAPU32;class ExceptionInfo{constructor(excPtr){this.excPtr=excPtr;this.ptr=excPtr-24}set_type(type){HEAPU32[this.ptr+4>>2]=type}get_type(){return HEAPU32[this.ptr+4>>2]}set_destructor(destructor){HEAPU32[this.ptr+8>>2]=destructor}get_destructor(){return HEAPU32[this.ptr+8>>2]}set_caught(caught){caught=caught?1:0;HEAP8[this.ptr+12]=caught}get_caught(){return HEAP8[this.ptr+12]!=0}set_rethrown(rethrown){rethrown=rethrown?1:0;HEAP8[this.ptr+13]=rethrown}get_rethrown(){return HEAP8[this.ptr+13]!=0}init(type,destructor){this.set_adjusted_ptr(0);this.set_type(type);this.set_destructor(destructor)}set_adjusted_ptr(adjustedPtr){HEAPU32[this.ptr+16>>2]=adjustedPtr}get_adjusted_ptr(){return HEAPU32[this.ptr+16>>2]}}var uncaughtExceptionCount=0;var __Unwind_RaiseException=ex=>{abort()};var ___cxa_throw=(ptr,type,destructor)=>{var info=new ExceptionInfo(ptr);info.init(type,destructor);uncaughtExceptionCount++;__Unwind_RaiseException(ptr)};var __abort_js=()=>abort("");var getHeapMax=()=>2147483648;var alignMemory=(size,alignment)=>Math.ceil(size/alignment)*alignment;var growMemory=size=>{var oldHeapSize=wasmMemory.buffer.byteLength;var pages=(size-oldHeapSize+65535)/65536|0;try{wasmMemory.grow(pages);updateMemoryViews();return 1}catch(e){}};var HEAPU8;var _emscripten_resize_heap=requestedSize=>{var oldSize=HEAPU8.length;requestedSize>>>=0;var maxHeapSize=getHeapMax();if(requestedSize>maxHeapSize){return false}for(var cutDown=1;cutDown<=4;cutDown*=2){var overGrownHeapSize=oldSize*(1+.2/cutDown);overGrownHeapSize=Math.min(overGrownHeapSize,requestedSize+100663296);var newSize=Math.min(maxHeapSize,alignMemory(Math.max(requestedSize,overGrownHeapSize),65536));var replacement=growMemory(newSize);if(replacement){return true}}return false};var HEAP32;var HEAPF64;var UTF8Decoder=globalThis.TextDecoder&&new TextDecoder;var findStringEnd=(heapOrArray,idx,maxBytesToRead,ignoreNul)=>{var maxIdx=idx+maxBytesToRead;if(ignoreNul)return maxIdx;while(heapOrArray[idx]&&!(idx>=maxIdx))++idx;return idx};var UTF8ArrayToString=(heapOrArray,idx=0,maxBytesToRead,ignoreNul)=>{var endPtr=findStringEnd(heapOrArray,idx,maxBytesToRead,ignoreNul);if(endPtr-idx>16&&heapOrArray.buffer&&UTF8Decoder){return UTF8Decoder.decode(heapOrArray.subarray(idx,endPtr))}var str="";while(idx<endPtr){var u0=heapOrArray[idx++];if(!(u0&128)){str+=String.fromCharCode(u0);continue}var u1=heapOrArray[idx++]&63;if((u0&224)==192){str+=String.fromCharCode((u0&31)<<6|u1);continue}var u2=heapOrArray[idx++]&63;if((u0&240)==224){u0=(u0&15)<<12|u1<<6|u2}else{u0=(u0&7)<<18|u1<<12|u2<<6|heapOrArray[idx++]&63}if(u0<65536){str+=String.fromCharCode(u0)}else{var ch=u0-65536;str+=String.fromCharCode(55296|ch>>10,56320|ch&1023)}}return str};var UTF8ToString=(ptr,maxBytesToRead,ignoreNul)=>ptr?UTF8ArrayToString(HEAPU8,ptr,maxBytesToRead,ignoreNul):"";for(var base64ReverseLookup=new Uint8Array(123),__b64i=25;__b64i>=0;--__b64i){base64ReverseLookup[48+__b64i]=52+__b64i;base64ReverseLookup[65+__b64i]=__b64i;base64ReverseLookup[97+__b64i]=26+__b64i}base64ReverseLookup[43]=62;base64ReverseLookup[47]=63;{if(Module["noExitRuntime"])noExitRuntime=Module["noExitRuntime"];if(Module["print"])out=Module["print"];if(Module["printErr"])err=Module["printErr"];if(Module["arguments"])programArgs=Module["arguments"];if(Module["thisProgram"])thisProgram=Module["thisProgram"];var preInit=Module["preInit"];if(preInit){if(typeof preInit=="function")Module["preInit"]=preInit=[preInit];while(preInit.length>0){preInit.shift()()}}}Module["UTF8ToString"]=UTF8ToString;var _lgca_create,_malloc,_free,_lgca_destroy,_lgca_error,_lgca_init_lattice,_lgca_step,_lgca_occ_ptr,_lgca_src_ptr,_lgca_cell_count,_lgca_set_occ,_lgca_get_rng,_lgca_set_rng,_lgca_measure,_lgca_band,_lgca_nuparts,_lgca_t,_lgca_set_nuparts,_lgca_set_t,_lgca_set_options,memory,__indirect_function_table,wasmMemory;function assignWasmExports(wasmExports){_lgca_create=Module["_lgca_create"]=wasmExports["f"];_malloc=Module["_malloc"]=wasmExports["g"];_free=Module["_free"]=wasmExports["h"];_lgca_destroy=Module["_lgca_destroy"]=wasmExports["i"];_lgca_error=Module["_lgca_error"]=wasmExports["j"];_lgca_init_lattice=Module["_lgca_init_lattice"]=wasmExports["k"];_lgca_step=Module["_lgca_step"]=wasmExports["l"];_lgca_occ_ptr=Module["_lgca_occ_ptr"]=wasmExports["m"];_lgca_src_ptr=Module["_lgca_src_ptr"]=wasmExports["n"];_lgca_cell_count=Module["_lgca_cell_count"]=wasmExports["o"];_lgca_set_occ=Module["_lgca_set_occ"]=wasmExports["p"];_lgca_get_rng=Module["_lgca_get_rng"]=wasmExports["q"];_lgca_set_rng=Module["_lgca_set_rng"]=wasmExports["r"];_lgca_measure=Module["_lgca_measure"]=wasmExports["s"];_lgca_band=Module["_lgca_band"]=wasmExports["t"];_lgca_nuparts=Module["_lgca_nuparts"]=wasmExports["u"];_lgca_t=Module["_lgca_t"]=wasmExports["v"];_lgca_set_nuparts=Module["_lgca_set_nuparts"]=wasmExports["w"];_lgca_set_t=Module["_lgca_set_t"]=wasmExports["x"];_lgca_set_options=Module["_lgca_set_options"]=wasmExports["y"];memory=wasmMemory=wasmExports["d"];__indirect_function_table=wasmExports["__indirect_function_table"]}var wasmImports={a:___cxa_throw,b:__abort_js,c:_emscripten_resize_heap};async function run(){preRun();var setStatus=Module["setStatus"];if(setStatus){setStatus("Running...");await new Promise(resolve=>setTimeout(resolve,1));setTimeout(setStatus,1,"")}if(ABORT)return;initRuntime();Module["onRuntimeInitialized"]?.();postRun()}var wasmExports;wasmExports=await createWasm();await run();
+;return Module}})();if(typeof exports==="object"&&typeof module==="object"){module.exports=createLgcaWasm;module.exports.default=createLgcaWasm}else if(typeof define==="function"&&define["amd"])define([],()=>createLgcaWasm);
+</script>
+
 <script>
 "use strict";
 /* ============================== UI =============================== */
@@ -658,16 +990,101 @@ let view={x:0,y:0,zoom:1};
 let s0=5.5, cssH=572, worldW=660, worldH=572, shearX=0;
 let needTrailClear=true;
 
-/* replay ring buffer of post-collision states */
-let rb={slots:[],ticks:[],cap:0,len:0,head:0};
-let replay={on:false,T:0,k:-1,occR:null,streamedK:-1};
+/* replay view state; the ring buffer of past states itself lives in the worker */
+let replay={on:false,T:0,k:-1,occR:null,streamedK:-1,slotK:-1,askedK:-1,slotSrc:null,slotRng:null,spareBuf:null};
 
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
-function makeSim(){
+/* ---------------- simulation host ----------------
+   The simulation steps in a Web Worker built from the page's own engine and worker
+   blocks (the worker block documents the messages). If no worker can be created, or
+   it fails to answer, the same worker code runs on the main thread through a
+   MessageChannel, so the Lab works everywhere; only the smoothness on big lattices
+   is lost. `sim` is a MIRROR of the worker's state: the latest tick, measures and
+   RNG state, plus a copy of the lattice for drawing (`src`, `occ`, taken at tick
+   `frameT`), all refreshed by the worker's replies. Two pairs of lattice buffers
+   alternate between the two sides (one displayed, one being filled); they are
+   transferred, never copied through the message. */
+let host=null;            // {kind:"worker"|"main", port, hello, url, timer, terminate()}
+let epoch=0;              // bumped by reset(); replies from an older epoch are ignored
+let seq=0;
+let pend={stepping:false,stepReason:"",stepGen:0,jumps:0,jumpK:-1,frame:false,slot:false};
+let spare=null;           // the lattice buffer pair on this side that is not displayed
+let queued=0, queueGen=0; // steps still owed to +1 / +N; the generation changes when the queue is cancelled
+let animOnReply=false;    // +1: start the glide when its step arrives
+/* cancel pending +1/+N steps; a reply to a request made for the old queue must not debit the new one */
+function clearQueue(){ queued=0; animOnReply=false; queueGen++; }
+const STEP_BUDGET_MS=16;  // the worker steps for about one frame per request
+
+/* The simulation engine: "wasm" (the C++ engine compiled to WebAssembly, the wasmEngine
+   block) or "js" (the same mathematics in the engine block). Both give the same states for
+   the same seed and settings, and WebAssembly is faster, so it is simply the engine: the
+   page offers no control for it (the transport card's control was removed 2026-10-01) and
+   keeps no stored choice. Developer paths only: ?engine=js or ?engine=wasm in the URL for
+   that page load, and labEngine() on the console for this page session. Where WebAssembly
+   cannot load, or refuses the settings, the worker runs the JavaScript engine instead and
+   its init reply says so; the page logs that as a console warning (onHostMessage) and
+   shows nothing. */
+const ENGINE_DEFAULT="wasm";
+const isEngine=v=>v==="js"||v==="wasm";
+let engineChoice=(()=>{
+  const q=new URLSearchParams(location.search).get("engine");
+  return isEngine(q)?q:ENGINE_DEFAULT;
+})();
+/* the removed control kept its choice in localStorage; forget it once, so an old "js"
+   can never pin the slower engine with nothing on the page to undo it */
+try{ localStorage.removeItem("lgcaEngine"); }catch(e){}
+/* WebAssembly chosen anew: the next init asks the worker to try a failed load again */
+let retryWasm=false;
+function chooseEngine(name){ engineChoice=name; retryWasm=name==="wasm"; reset(); }
+/* the WebAssembly engine's loader, inlined by native/inline-wasm.mjs ("" if absent) */
+function wasmGlueText(){ const b=document.getElementById("wasmEngine"); return b?b.textContent:""; }
+function workerSource(){
+  return $("engineSrc").textContent+"\n"+$("workerSrc").textContent+
+         "\nsimWorkerMain(self,"+JSON.stringify(wasmGlueText())+");\n";
+}
+function useMainThreadHost(){
+  const ch=new MessageChannel();
+  host={kind:"main",port:ch.port1,hello:true,url:null,timer:null,terminate(){ ch.port1.close(); ch.port2.close(); }};
+  ch.port1.onmessage=e=>{ if(host&&host.port===ch.port1) onHostMessage(e.data); };
+  simWorkerMain(ch.port2,wasmGlueText());
+}
+function startHost(){
+  if(host) return;
+  let w=null, url=null;
+  try{
+    if(typeof Worker==="function" && typeof URL.createObjectURL==="function"){
+      url=URL.createObjectURL(new Blob([workerSource()],{type:"text/javascript"}));
+      w=new Worker(url);
+    }
+  }catch(err){ console.warn("LGCA Lab: no Web Worker ("+err.message+"); simulating on the main thread"); w=null; }
+  if(!w){ useMainThreadHost(); return; }
+  const h={kind:"worker",port:w,hello:false,url,timer:null,terminate(){ w.terminate(); }};
+  host=h;
+  /* no answer, or an error at any time: continue on the main thread (the run restarts) */
+  const giveUp=why=>{
+    if(host!==h) return;
+    console.warn("LGCA Lab: simulation worker "+why+"; simulating on the main thread");
+    clearTimeout(h.timer); w.terminate(); host=null;
+    useMainThreadHost(); reset();
+  };
+  w.onerror=e=>giveUp((h.hello?"failed":"did not start")+(e&&e.message?": "+e.message:""));
+  h.timer=setTimeout(()=>{ if(!h.hello) giveUp("did not answer"); },3000);
+  w.onmessage=e=>{ if(host===h) onHostMessage(e.data); };
+}
+function post(msg,transfer){ msg.seq=++seq; msg.epoch=epoch; host.port.postMessage(msg,transfer||[]); }
+/* attach the free lattice buffer pair, so the reply brings the lattice for drawing */
+function postWithFrame(msg){
+  if(spare){
+    const bufs={src:spare.src.buffer,occ:spare.occ.buffer};
+    spare=null; msg.bufs=bufs; post(msg,[bufs.src,bufs.occ]);
+  } else { msg.bufs=null; post(msg); }
+}
+function stepCfg(){ return {sens:P.sens,kernel:P.kernel,alpha:P.alpha,bosonField:P.bosonField,bosonAlign:P.bosonAlign}; }
+function initParams(){
   const W=+$("inSize").value;
-  return new LGCA({model:P.model, W, H:W, dens:+$("inDens").value, seed:+$("inSeed").value,
-                   kernel:P.kernel, alpha:P.alpha, bosonField:P.bosonField, bosonAlign:P.bosonAlign});
+  return {model:P.model, W, H:W, dens:+$("inDens").value, seed:+$("inSeed").value,
+          kernel:P.kernel, alpha:P.alpha, bosonField:P.bosonField, bosonAlign:P.bosonAlign, engine:engineChoice};
 }
 function reset(){
   /* density takes effect only here; keep typed values inside the C++ program's
@@ -675,67 +1092,112 @@ function reset(){
   { const dv=+$("inDens").value;
     if(!(dv>=0)) $("inDens").value=0;
     else if(P.model==="fermion"&&dv>=1) $("inDens").value=0.95; }
-  sim=makeSim();
-  sim._dens=+$("inDens").value;
+  startHost();
+  const o=initParams(), N6=o.W*o.H*6;
+  epoch++; seq=0;
+  pend={stepping:false,stepReason:"",stepGen:0,jumps:0,jumpK:-1,frame:false,slot:false};
+  clearQueue();
+  sim={model:o.model,W:o.W,H:o.H,dens:o.dens,_dens:o.dens,initialSeed:o.seed,engine:"",
+       t:0,nuparts:0,_m:null,_b:null,_rho:null,rngState:null,range:[0,0],
+       src:new Int32Array(N6),occ:new Int32Array(N6),frameT:-1,frameRng:null};
+  spare={src:new Int32Array(N6),occ:new Int32Array(N6)};
   hist={t:[],p:[],n:[],s:[],rho:[],cfg:[],bt:[],bv:[]};
-  record();
-  sim.step(P.sens); record();
-  phase=0;
+  replay.slotK=-1; replay.askedK=-1; replay.slotSrc=null; replay.slotRng=null; replay.spareBuf=null;
+  replay.occR=null; replay.streamedK=-1;
+  phase=0; stepAnim=0;
   sizeCanvas();
-  const cap=Math.min(300,Math.max(20,Math.floor(24e6/(sim.W*sim.H*6*4))));
-  rb={slots:new Array(cap),rng:new Array(cap),ticks:new Int32Array(cap),cap,len:0,head:0};
-  pushReplay();
+  postWithFrame({type:"init",params:o,cfg:stepCfg(),band:$("inBand").checked,retryWasm});
+  retryWasm=false;
   exitReplay();
   updateBufLabel();
   needTrailClear=true;
   drawChart();
 }
-function pushReplay(){
-  const i=rb.head;
-  if(!rb.slots[i]) rb.slots[i]=new Int32Array(sim.W*sim.H*6);
-  rb.slots[i].set(sim.src);
-  if(!rb.rng[i]) rb.rng[i]=new Uint32Array(33);
-  rb.rng[i].set(sim.rng.getState());
-  rb.ticks[i]=sim.t;
-  rb.head=(rb.head+1)%rb.cap;
-  if(rb.len<rb.cap) rb.len++;
+/* how many steps the UI wants next: +1/+N first, then play at the chosen speed */
+function stepsWanted(){
+  if(!sim||replay.on) return 0;
+  if(queued>0) return queued;
+  if(!playing) return 0;
+  const target=SPEEDS[+$("inSpeed").value];
+  if(target===Infinity) return 1e9;
+  return phase>=1?Math.min(400,Math.floor(phase)):0;
 }
-function replayRngSlot(tick){
-  for(let q=0;q<rb.len;q++){
-    const i=(rb.head-1-q+rb.cap*2)%rb.cap;
-    if(rb.ticks[i]===tick) return rb.rng[i];
+function maybeSendSteps(){
+  if(!host||pend.stepping||pend.jumps>0) return;
+  const n=stepsWanted();
+  if(n<=0) return;
+  pend.stepping=true; pend.stepReason=queued>0?"queue":"play"; pend.stepGen=queueGen;
+  postWithFrame({type:"step",n,ms:STEP_BUDGET_MS,cfg:stepCfg(),band:$("inBand").checked});
+}
+function queueSteps(n){ queued+=n; maybeSendSteps(); }
+/* append the worker's per-step samples to the chart history */
+function applyRecords(recs){
+  for(const r of recs){
+    hist.t.push(r.t); hist.p.push(r.polar); hist.n.push(r.nematic); hist.s.push(r.spatial);
+    hist.rho.push(r.rho); hist.cfg.push(r.cfg);
+    if(r.band!=null){ hist.bt.push(r.t); hist.bv.push(r.band); sim._b=r.band; }
+    if(hist.t.length>240000){ for(const k of["t","p","n","s","rho","cfg"]) hist[k]=hist[k].filter((_,q)=>q%2===0); }
   }
-  return null;
 }
-/* True rewind: restore lattice AND generator state to buffered tick k, truncating
-   history beyond it. Deterministic: stepping forward again reproduces the same
-   trajectory unless a parameter is changed after rewinding (a deliberate branch). */
+/* every reply from the worker lands here */
+function onHostMessage(r){
+  if(r.type==="hello"){
+    if(host&&!host.hello){ host.hello=true; clearTimeout(host.timer); if(host.url) URL.revokeObjectURL(host.url); }
+    return;
+  }
+  if(r.epoch!==epoch) return;          // from before the last reset
+  if(r.type==="slot"){ pend.slot=false; onSlot(r); return; }
+  if(r.src){                            // the filled pair becomes the display; the old one is free again
+    spare={src:sim.src,occ:sim.occ};
+    sim.src=r.src; sim.occ=r.occ; sim.frameT=r.frameT; sim.frameRng=r.rng;
+  }
+  sim.t=r.t; sim.nuparts=r.nuparts; sim.rngState=r.rng; sim._m=r.m; sim._rho=r.rho; sim.range=r.range;
+  if(r.records) applyRecords(r.records);
+  if(r.type==="step"){
+    pend.stepping=false; spsCount+=r.did;
+    if(pend.stepReason==="queue"){
+      if(pend.stepGen===queueGen){
+        queued=Math.max(0,queued-r.did);
+        if(queued===0&&animOnReply){ animOnReply=false; phase=0; stepAnim=1; }
+      }
+    } else if(queued===0) phase=Math.max(0,phase-r.did);
+    updateBufLabel();
+  } else if(r.type==="jump"){
+    pend.jumps--;
+    if(r.ok) finishJump(r.k); else { exitReplay(); flashBufLimit(); }
+  } else if(r.type==="init"){
+    sim.engine=r.engine;                 // the engine that runs ("js" or "wasm")
+    if(r.engineNote) console.warn("LGCA Lab: "+r.engineNote);   // a fallback: the console only, nothing on the page
+    updateBufLabel(); drawChart();
+  } else if(r.type==="frame"){
+    pend.frame=false;
+  }
+  maybeSendSteps();
+}
+
+/* ---------------- replay: true rewind and view-only scrubbing ---------------- */
+function replayRange(){ return sim?sim.range:[0,0]; }
+/* True rewind to buffered tick k: the worker restores lattice AND generator state,
+   finishJump() then truncates the history. Deterministic: stepping forward again
+   reproduces the same trajectory unless a parameter is changed after rewinding
+   (a deliberate branch). */
 function jumpTo(k){
   const [a,b]=replayRange();
   k=Math.max(a,Math.min(b,k));
-  if(k===sim.t){ exitReplay(); phase=1; return; }
-  const buf=replaySlot(k), rs=replayRngSlot(k);
-  if(!buf||!rs){ exitReplay(); return; }
-  const {W,H}=sim;
-  for(let i=0;i<W;i++) for(let j=0;j<H;j++){
-    const bb=(j*W+i)*6;
-    for(let c=0;c<6;c++){
-      const X=(i+DST[c][0]+W)%W, Y=(j+DST[c][1]+H)%H;
-      sim.occ[(Y*W+X)*6+c]=buf[bb+c];
-    }
-  }
-  sim.src.set(buf);
-  sim.rng.setState(rs);
-  sim.t=k;
+  if(pend.jumps>0){ if(k===pend.jumpK) return; }               // already on its way there
+  else if(k===sim.t&&!pend.stepping){ exitReplay(); phase=1; return; }
+  pend.jumps++; pend.jumpK=k;
+  postWithFrame({type:"jump",k});
+}
+function finishJump(k){
   let hlen=hist.t.length; while(hlen>0&&hist.t[hlen-1]>k) hlen--;
   hist.t.length=hlen; hist.p.length=hlen; hist.n.length=hlen; hist.s.length=hlen; hist.rho.length=hlen; hist.cfg.length=hlen;
   let blen=hist.bt.length; while(blen>0&&hist.bt[blen-1]>k) blen--;
   hist.bt.length=blen; hist.bv.length=blen;
-  const newest=rb.ticks[(rb.head-1+rb.cap)%rb.cap];
-  const drop=newest-k;
-  if(drop>0){ rb.head=(rb.head-drop+rb.cap)%rb.cap; rb.len-=drop; }
-  sim._m=sim.measure();
   if(blen>0) sim._b=hist.bv[blen-1];
+  /* ticks beyond k are gone and may be replaced by a branch: forget any fetched slot */
+  if(replay.slotSrc){ replay.spareBuf=replay.slotSrc; replay.slotSrc=null; }
+  replay.slotK=-1; replay.slotRng=null; replay.askedK=-1; replay.streamedK=-1; densityCache={};
   exitReplay(); phase=1;
   updateBufLabel(); needTrailClear=true; drawChart();
 }
@@ -747,8 +1209,9 @@ function flashBufLimit(){
 }
 function back(n){
   playing=false; $("bPlay").textContent="Play";
+  clearQueue();
   const [a]=replayRange();
-  const cur=replay.on?replay.k:sim.t;
+  const cur=pend.jumps>0?pend.jumpK:(replay.on?replay.k:sim.t);
   let target=cur-n;
   const clamped=target<a;
   if(clamped) target=a;
@@ -757,20 +1220,38 @@ function back(n){
 }
 function fwdN(n){
   if(replay.on) jumpTo(replay.k);
-  doSteps(n); phase=1;
+  queueSteps(n); phase=1;
 }
+/* the buffered post-collision lattice at `tick`, fetched from the worker on demand;
+   until it arrives this returns the last fetched slot, or null */
 function replaySlot(tick){
-  for(let q=0;q<rb.len;q++){
-    const i=(rb.head-1-q+rb.cap*2)%rb.cap;
-    if(rb.ticks[i]===tick) return rb.slots[i];
-  }
-  return null;
+  if(replay.slotK!==tick&&replay.askedK!==tick) requestSlot(tick);
+  return replay.slotSrc;
 }
-function replayRange(){
-  if(rb.len===0) return [sim.t,sim.t];
-  const newest=rb.ticks[(rb.head-1+rb.cap)%rb.cap];
-  const oldest=rb.ticks[(rb.head-rb.len+rb.cap*2)%rb.cap];
-  return [oldest,newest];
+function replayRngSlot(tick){ return replay.slotK===tick?replay.slotRng:null; }
+function requestSlot(tick){
+  if(!host||pend.slot) return;
+  pend.slot=true; replay.askedK=tick;
+  const buf=replay.spareBuf; replay.spareBuf=null;
+  post({type:"slot",k:tick,buf:buf?buf.buffer:null},buf?[buf.buffer]:[]);
+}
+function onSlot(r){
+  if(r.k!=null){
+    replay.spareBuf=replay.slotSrc;
+    replay.slotSrc=r.src; replay.slotRng=r.rng; replay.slotK=r.k; replay.streamedK=-1;
+  } else {
+    /* the tick asked for is no longer buffered (a batch in flight evicted it). If the
+       selection still points at it, move it into the buffered range; a tick in range yet
+       missing is asked for only once. A selection moved elsewhere meanwhile is fetched below. */
+    const failed=replay.askedK;
+    replay.spareBuf=r.src; replay.askedK=-1;
+    if(replay.on&&replay.k===failed){
+      const [a,b]=replayRange();
+      if(failed<a||failed>b){ setReplayT(replay.T); flashBufLimit(); }
+      if(replay.k===failed) replay.askedK=failed;
+    }
+  }
+  if(replay.on&&replay.k!==replay.slotK&&replay.k!==replay.askedK) requestSlot(replay.k);   // the slider moved meanwhile
 }
 function updateBufLabel(){
   const [a,b]=replayRange();
@@ -779,11 +1260,12 @@ function updateBufLabel(){
 }
 function enterReplay(v){
   replay.on=true; playing=false; $("bPlay").textContent="Play";
+  clearQueue();
   $("bdgReplay").style.display="inline-block";
   setReplayT(v);
 }
 function exitReplay(){
-  replay.on=false; replay.k=-1; replay.streamedK=-1;
+  replay.on=false; replay.k=-1; replay.streamedK=-1; replay.askedK=-1;
   $("bdgReplay").style.display="none";
   const [,b]=replayRange(); $("inReplay").value=b;
   needTrailClear=true;
@@ -796,22 +1278,15 @@ function setReplayT(v){
   replay.k=k;
   replay.f=Math.min(1,Math.max(0,replay.T-(k-1)));
 }
+/* the streamed lattice of the fetched replay slot (cached per slot); live lattice if none */
 function replayStreamed(){
-  if(replay.streamedK===replay.k && replay.occR) return replay.occR;
   const buf=replaySlot(replay.k);
   if(!buf) return sim.occ;
+  if(replay.streamedK===replay.slotK && replay.occR) return replay.occR;
   if(!replay.occR||replay.occR.length!==buf.length) replay.occR=new Int32Array(buf.length);
-  const {W,H}=sim, o=replay.occR;
-  o.fill(0);
-  for(let i=0;i<W;i++) for(let j=0;j<H;j++){
-    const b=(j*W+i)*6;
-    for(let k=0;k<6;k++){
-      const X=(i+DST[k][0]+W)%W, Y=(j+DST[k][1]+H)%H;
-      o[(Y*W+X)*6+k]=buf[b+k];
-    }
-  }
-  replay.streamedK=replay.k;
-  return o;
+  streamInto(buf,replay.occR,sim.W,sim.H);
+  replay.streamedK=replay.slotK;
+  return replay.occR;
 }
 
 function sizeCanvas(){
@@ -828,21 +1303,6 @@ function sizeCanvas(){
   view={x:0,y:0,zoom:1};
   $("stZoom").textContent="1.0×";
 }
-function record(){
-  const m=sim.measure();
-  hist.t.push(sim.t); hist.p.push(m.polar); hist.n.push(m.nematic); hist.s.push(m.spatial);
-  sim._m=m;
-  hist.rho.push(densityStats(sim.occ));
-  hist.cfg.push({sens:P.sens,alpha:P.kernel==="sum"?0:P.kernel==="avg"?1:P.alpha,kernel:P.kernel,field:sim.model==="fermion"?"neigh":P.bosonField,alignment:sim.model==="fermion"?"polar":P.bosonAlign});
-  if($("inBand").checked && (sim.t%10===0)){ const bv=sim.band(); hist.bt.push(sim.t); hist.bv.push(bv); sim._b=bv; }
-  if(hist.t.length>240000){ for(const k of["t","p","n","s","rho","cfg"]) hist[k]=hist[k].filter((_,q)=>q%2===0); }
-}
-function doSteps(n){
-  for(let q=0;q<n;q++){ sim.step(P.sens); record(); pushReplay(); }
-  spsCount+=n;
-  updateBufLabel();
-}
-
 /* ---------------- field rendering (offscreen image) ---------------- */
 const off=document.createElement("canvas");
 let offCtx=null, offImg=null, offU32=null;
@@ -972,25 +1432,324 @@ function drawOverlay(kind,arr){
 }
 
 /* ---------------- particle rendering ---------------- */
-function drawParticles(arr,f,isRaw){
-  const {W,H}=sim;
-  const z=view.zoom, cellpx=s0*z;
-  const H3=Math.sqrt(3)/2;
-  const trails=P.trail!=="off";
-  if(trails&&!needTrailClear){
-    ctx.fillStyle=P.trail==="short"?"rgba(11,14,19,0.30)":"rgba(11,14,19,0.10)";
-    ctx.fillRect(0,0,CSSW,cssH);
-  } else {
-    ctx.fillStyle=BG; ctx.fillRect(0,0,CSSW,cssH);
-    needTrailClear=false;
+/* Small particles — squares, cellpx below 5.7 px, which is a 120² lattice and up at zoom 1 —
+   are drawn by the GPU. At 360² the view holds about 311k particles; building a Path2D of as
+   many rects and filling it cost 100–200 ms a frame in both browsers (1.2M edges to
+   rasterize), so the particle view ran at 5–12 frames/s while the density view ran at 60.
+   The lattice is scanned once per displayed state (not per frame): each horizontal run of
+   touching equal squares of one channel becomes one rectangle in WORLD coordinates, kept in
+   six channel buckets on the GPU. A frame then only sets uniforms — the view and each
+   bucket's glide offset — and draws the buckets as plain indexed triangles (Chromium's
+   software GL handles those, instancing it does not), then composites the GL canvas onto the
+   2D canvas with one drawImage, so background, trails, guides and counts stay as they were.
+   Direction colours: the Path2D code fills one path per colour, in order, so this draws the
+   buckets in that order, each square's fragment shader giving every pixel exactly the area
+   the rectangle covers (the coverage anti-aliasing a canvas fill approximates on a 4×4
+   sample grid), blended over the colours below. Single colour: the Path2D code fills ONE
+   path, so overlapping and stacked squares merge; here all squares are first drawn as one
+   binary union on a 4×4-per-pixel sample grid (the canvas rasterizer's own grid), and a
+   second pass turns each pixel's share of samples into its coverage.
+   What can differ from the Path2D picture is anti-aliasing only, never a colour, size or
+   position: with direction colours, squares of ONE colour overlapping between neighbouring
+   rows (360² only) blend instead of merging, and the canvas rasterizers quantize coverage
+   differently; measured in native/qa/renderer-2026-10-01/RESULTS.md.
+   The Path2D code (drawParticlesPath) draws instead when: there is no WebGL, or no 32-bit
+   indices (checked on every initialization, a restored context has none of its extensions);
+   the context is lost (until it is restored); single colour's sample grid exceeds the GL's
+   texture, renderbuffer or viewport limits; or GL measured slower than the Path2D code for
+   this lattice, canvas size, model and colouring (pglCalibrate, once, on the second GL
+   frame: a GPU is 5–50× faster, a software GL is faster at 360² and slower at 120²–180²).
+   pglSlow is a last safety net against a GL that stalls mid-session. Display only: nothing
+   here touches the simulation. `pgl.ok`: null = (re)initialize on the next draw, true =
+   ready, false = not used on this page. `pgl.frames` counts GL frames, `pgl.cal` holds the
+   calibrations (both read by the QA). */
+const pgl={ok:null,canvas:null,gl:null,gl2:false,prog:null,aP:-1,u:{},progB:null,aPB:-1,uB:{},progR:null,aQ:-1,uR:{},
+           quad:null,idx:null,idxCap:0,bufs:[],data:[],cnt:new Int32Array(6),w:0,h:0,key:"",arr:null,bx:null,
+           ss:{fbo:null,tex:null,w:0,h:0,ok:false},slow:0,retry:0,frames:0,cal:{}};
+const PGL_SS=4;                                   /* samples per pixel edge for the single-colour union */
+const hexRGB=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255);
+const PGL_COL=DIRCOL.map(hexRGB), PGL_UNI=hexRGB(UNICOL);
+function pglInit(){
+  if(pgl.ok===false) return false;
+  if(pgl.ok&&!pgl.gl.isContextLost()) return true;
+  const fail=why=>{ pgl.ok=false; console.warn("LGCA Lab: the particle view draws without WebGL ("+why+")"); return false; };
+  try{
+    if(!pgl.canvas){
+      pgl.canvas=document.createElement("canvas");
+      pgl.canvas.addEventListener("webglcontextlost",e=>{ e.preventDefault(); if(pgl.ok) pgl.ok=null; });
+      pgl.canvas.addEventListener("webglcontextrestored",()=>{ if(pgl.ok!==false) pgl.ok=null; });
+      const opt={alpha:true,antialias:false,depth:false,stencil:false,premultipliedAlpha:true,preserveDrawingBuffer:false};
+      let gl=pgl.canvas.getContext("webgl2",opt);
+      pgl.gl2=!!gl;
+      if(!gl){
+        gl=pgl.canvas.getContext("webgl",opt);
+        if(!gl) return fail("no WebGL context");
+      }
+      pgl.gl=gl;
+    }
+    const gl=pgl.gl;
+    if(gl.isContextLost()) return false;          // wait for the restore event; Path2D meanwhile
+    /* everything from here is per (re)initialization: a restored context has lost its
+       extensions, programs, buffers and textures */
+    if(!pgl.gl2&&!gl.getExtension("OES_element_index_uint")) return fail("no 32-bit indices");
+    const sh=(type,src)=>{ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+      if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)||"shader"); return s; };
+    const link=(vs,fs)=>{ const p=gl.createProgram(); gl.attachShader(p,sh(gl.VERTEX_SHADER,vs)); gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs)); gl.linkProgram(p);
+      if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)||"link"); return p; };
+    const uni=(p,names,into)=>{ for(const n of names) into[n]=gl.getUniformLocation(p,n); };
+    /* p: a rectangle's world centre x,y and its signed half sizes (CSS px): the sign is the corner */
+    const HEAD="attribute vec4 p;uniform vec2 res;uniform vec2 view;uniform float scale;uniform float dpr;uniform vec2 off;";
+    /* coverage squares: the quad reaches every pixel the rectangle touches; v = centre in window
+       coordinates (y up) and half sizes, device px */
+    pgl.prog=link(HEAD+"varying vec4 v;"+
+      "void main(){vec2 c=(p.xy+off-view)*scale;vec2 h=abs(p.zw)*dpr;vec2 s=c+sign(p.zw)*(h+0.5);"+
+      "gl_Position=vec4(s.x*2.0/res.x-1.0,1.0-s.y*2.0/res.y,0.0,1.0);v=vec4(c.x,res.y-c.y,h);}",
+      "precision highp float;uniform vec3 col;varying vec4 v;"+
+      "void main(){vec2 lo=max(v.xy-v.zw,gl_FragCoord.xy-0.5);vec2 hi=min(v.xy+v.zw,gl_FragCoord.xy+0.5);"+
+      "vec2 c=clamp(hi-lo,0.0,1.0);float a=c.x*c.y;gl_FragColor=vec4(col*a,a);}");   /* exact area of the pixel covered */
+    pgl.aP=gl.getAttribLocation(pgl.prog,"p"); uni(pgl.prog,["res","view","scale","dpr","off","col"],pgl.u);
+    /* binary squares on the sample grid: the exact rectangle, a sample is inside or not */
+    pgl.progB=link(HEAD+
+      "void main(){vec2 s=(p.xy+off-view)*scale+p.zw*dpr;gl_Position=vec4(s.x*2.0/res.x-1.0,1.0-s.y*2.0/res.y,0.0,1.0);}",
+      "void main(){gl_FragColor=vec4(1.0);}");
+    pgl.aPB=gl.getAttribLocation(pgl.progB,"p"); uni(pgl.progB,["res","view","scale","dpr","off"],pgl.uB);
+    /* resolve: a pixel's coverage is the share of its 4×4 samples inside the union */
+    pgl.progR=link("attribute vec2 q;void main(){gl_Position=vec4(q,0.0,1.0);}",
+      "precision highp float;uniform sampler2D tex;uniform vec2 texSize;uniform vec3 col;"+
+      "void main(){vec2 b=floor(gl_FragCoord.xy)*4.0;float a=0.0;"+
+      "for(int j=0;j<4;j++)for(int i=0;i<4;i++)a+=texture2D(tex,(b+vec2(float(i)+0.5,float(j)+0.5))/texSize).r;"+
+      "a*=0.0625;gl_FragColor=vec4(col*a,a);}");
+    pgl.aQ=gl.getAttribLocation(pgl.progR,"q"); uni(pgl.progR,["tex","texSize","col"],pgl.uR);
+    pgl.quad=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,pgl.quad);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+    pgl.idx=gl.createBuffer(); pgl.idxCap=0;
+    pgl.bufs=[]; for(let k=0;k<6;k++){ pgl.bufs.push(gl.createBuffer()); if(!pgl.data[k]) pgl.data[k]=new Float32Array(16*8192); }
+    gl.disable(gl.DITHER); gl.disable(gl.DEPTH_TEST);
+    gl.clearColor(0,0,0,0);
+    pgl.w=0; pgl.h=0; pgl.key=""; pgl.ss.tex=null; pgl.ss.fbo=null; pgl.ss.w=0; pgl.ss.h=0; pgl.ss.ok=false; pgl.slow=0;
+    pgl.ok=true;
+    return true;
+  }catch(err){ return fail(err.message); }
+}
+/* two triangles per rectangle: vertices 4i..4i+3 are its corners (-,-) (+,-) (-,+) (+,+) */
+function pglIndices(n){
+  if(n<=pgl.idxCap) return;
+  const gl=pgl.gl, cap=Math.max(n,2*pgl.idxCap,8192), ix=new Uint32Array(6*cap);
+  for(let i=0,o=0;i<cap;i++,o+=6){ const b=4*i; ix[o]=b; ix[o+1]=b+1; ix[o+2]=b+2; ix[o+3]=b+2; ix[o+4]=b+1; ix[o+5]=b+3; }
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,pgl.idx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,ix,gl.STATIC_DRAW);
+  pgl.idxCap=cap;
+}
+/* the sample-grid texture for the single-colour union: PGL_SS× the canvas in each direction;
+   false where it exceeds this GL's texture, renderbuffer or viewport limits */
+function pglSSSetup(){
+  const gl=pgl.gl, w=PGL_SS*pgl.w, h=PGL_SS*pgl.h;
+  if(pgl.ss.w===w&&pgl.ss.h===h) return pgl.ss.ok;
+  pgl.ss.w=w; pgl.ss.h=h; pgl.ss.ok=false;
+  const vp=gl.getParameter(gl.MAX_VIEWPORT_DIMS)||[0,0];
+  const lim=Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE),gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),vp[0],vp[1]);
+  if(!(Math.max(w,h)<=lim)) return false;
+  if(!pgl.ss.tex){ pgl.ss.tex=gl.createTexture(); pgl.ss.fbo=gl.createFramebuffer(); }
+  gl.bindTexture(gl.TEXTURE_2D,pgl.ss.tex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  if(pgl.gl2) gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,w,h,0,gl.RED,gl.UNSIGNED_BYTE,null);     /* one byte a sample */
+  else gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,pgl.ss.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,pgl.ss.tex,0);
+  pgl.ss.ok=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  return pgl.ss.ok;
+}
+/* one run of bucket c: world centres xa..xb of its first and last site, row centre y, half size
+   r (CSS px on screen); its copies one world width left and right are added when they can reach
+   the view (the glide moves a square by less than a cell, the margins allow for that) */
+function pglRun(c,xa,xb,y,r,z,cellpx){
+  const hx=(xb-xa)*0.5*z+r, cx=(xa+xb)*0.5;
+  const lo=view.x-(2*cellpx+hx)/z, hi=view.x+(CSSW+2*cellpx+hx)/z;
+  let d=pgl.data[c], n=pgl.cnt[c];
+  for(let m=-1;m<=1;m++){
+    const x=cx+m*worldW;
+    if(x<lo||x>hi) continue;
+    if(16*n+16>d.length){ const g=new Float32Array(2*d.length); g.set(d); d=pgl.data[c]=g; }
+    let o=16*n;
+    d[o++]=x; d[o++]=y; d[o++]=-hx; d[o++]=-r;
+    d[o++]=x; d[o++]=y; d[o++]= hx; d[o++]=-r;
+    d[o++]=x; d[o++]=y; d[o++]=-hx; d[o++]= r;
+    d[o++]=x; d[o++]=y; d[o++]= hx; d[o++]= r;
+    n++;
   }
-  const j0=Math.floor(view.y/(H3*s0))-1, j1=Math.floor((view.y+cssH/z)/(H3*s0))+1;
-  if($("inGuides").checked && cellpx>=15 && !trails) drawGuides(j0,j1,z,H3);
+  pgl.cnt[c]=n;
+}
+/* scan the lattice into run rectangles, one bucket per channel, and upload them */
+function pglBuild(arr,j0,j1,z,cellpx,rBase){
+  const gl=pgl.gl, {W,H}=sim, H3=Math.sqrt(3)/2;
+  const boson=P.model==="boson", rMax=0.46*cellpx, cnt=pgl.cnt;
+  cnt.fill(0);
+  if(!pgl.bx||pgl.bx.length<W) pgl.bx=new Float64Array(W);
+  const bx=pgl.bx;
+  for(let jj=j0;jj<=j1;jj++){
+    const jw=((jj%H)+H)%H, rowy=(jj+0.5)*H3*s0;
+    const syc=(rowy-view.y)*z;
+    if(syc<-8-cellpx||syc>cssH+8+cellpx) continue;
+    for(let ii=0;ii<W;ii++) bx[ii]=((((ii+jj*0.5)%W)+W)%W+0.5)*s0;
+    const base=jw*W*6;
+    for(let k=0;k<6;k++){
+      let ra=0,rb=0,rr=0;                           /* the run being built: first/last centre, half size */
+      for(let ii=0;ii<W;ii++){
+        const n=arr[base+ii*6+k];
+        if(n){
+          const r=boson?Math.min(rMax,rBase*Math.sqrt(n)):rBase;
+          if(rr){
+            const gap=(bx[ii]-rb)*z;                /* next site along the row: squares touching or overlapping join */
+            if(r===rr&&gap>0&&gap<=2*r+1e-9){ rb=bx[ii]; continue; }
+            pglRun(k,ra,rb,rowy,rr,z,cellpx);
+          }
+          ra=rb=bx[ii]; rr=r;
+        } else if(rr){ pglRun(k,ra,rb,rowy,rr,z,cellpx); rr=0; }
+      }
+      if(rr) pglRun(k,ra,rb,rowy,rr,z,cellpx);
+    }
+  }
+  let most=0;
+  for(let k=0;k<6;k++){
+    if(!cnt[k]) continue;
+    if(cnt[k]>most) most=cnt[k];
+    gl.bindBuffer(gl.ARRAY_BUFFER,pgl.bufs[k]);
+    gl.bufferData(gl.ARRAY_BUFFER,pgl.data[k].subarray(0,16*cnt[k]),gl.STREAM_DRAW);
+  }
+  pglIndices(most);
+}
+/* draw the six buckets with the program in use: its p attribute and off uniform */
+function pglDrawBuckets(aP,uOff,g,colour){
+  const gl=pgl.gl, cnt=pgl.cnt;
+  gl.enableVertexAttribArray(aP);
+  for(let k=0;k<6;k++){                              /* the order of the Path2D fills: later colours on top */
+    if(!cnt[k]) continue;
+    if(colour){ const c=colour(k); gl.uniform3f(pgl.u.col,c[0],c[1],c[2]); }
+    gl.uniform2f(uOff,g*s0*CX[k],-g*s0*CY[k]);
+    gl.bindBuffer(gl.ARRAY_BUFFER,pgl.bufs[k]);
+    gl.vertexAttribPointer(aP,4,gl.FLOAT,false,0,0);
+    gl.drawElements(gl.TRIANGLES,6*cnt[k],gl.UNSIGNED_INT,0);
+  }
+  gl.disableVertexAttribArray(aP);
+}
+/* the particle picture into the GL canvas; false = this GL cannot draw it (Path2D does) */
+function pglRender(arr,f,isRaw,j0,j1,z,cellpx,rBase){
+  const gl=pgl.gl, uni=P.pcol!=="dir", g=isRaw?0.26:f;
+  if(pgl.w!==cvs.width||pgl.h!==cvs.height){ pgl.w=pgl.canvas.width=cvs.width; pgl.h=pgl.canvas.height=cvs.height; }
+  if(uni&&!pglSSSetup()) return false;               /* the sample grid exceeds this GL's limits */
+  /* the geometry depends on the displayed state and the view, not on the glide or colouring */
+  const key=sim.frameT+"|"+(replay.on?replay.slotK:-2)+"|"+view.x+"|"+view.y+"|"+view.zoom+"|"+
+            P.model+"|"+sim.W+"|"+sim.H+"|"+cvs.width+"|"+cvs.height;
+  if(key!==pgl.key||arr!==pgl.arr){ pglBuild(arr,j0,j1,z,cellpx,rBase); pgl.key=key; pgl.arr=arr; }
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,pgl.idx);
+  if(uni){
+    /* single colour: every square into one binary union on the sample grid ... */
+    gl.bindFramebuffer(gl.FRAMEBUFFER,pgl.ss.fbo);
+    gl.viewport(0,0,pgl.ss.w,pgl.ss.h);
+    gl.disable(gl.BLEND);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(pgl.progB);
+    gl.uniform2f(pgl.uB.res,pgl.ss.w,pgl.ss.h);
+    gl.uniform2f(pgl.uB.view,view.x,view.y);
+    gl.uniform1f(pgl.uB.scale,z*DPR*PGL_SS);
+    gl.uniform1f(pgl.uB.dpr,DPR*PGL_SS);
+    pglDrawBuckets(pgl.aPB,pgl.uB.off,g,null);
+    /* ... then each pixel's share of samples becomes its coverage */
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    gl.viewport(0,0,pgl.w,pgl.h);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(pgl.progR);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,pgl.ss.tex);
+    gl.uniform1i(pgl.uR.tex,0); gl.uniform2f(pgl.uR.texSize,pgl.ss.w,pgl.ss.h);
+    gl.uniform3f(pgl.uR.col,PGL_UNI[0],PGL_UNI[1],PGL_UNI[2]);
+    gl.bindBuffer(gl.ARRAY_BUFFER,pgl.quad);
+    gl.enableVertexAttribArray(pgl.aQ); gl.vertexAttribPointer(pgl.aQ,2,gl.FLOAT,false,0,0);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    gl.disableVertexAttribArray(pgl.aQ);
+  } else {
+    /* direction colours: exact-coverage squares, each bucket blended over the ones before */
+    gl.viewport(0,0,pgl.w,pgl.h);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);   /* premultiplied source-over, as a canvas fill */
+    gl.useProgram(pgl.prog);
+    gl.uniform2f(pgl.u.res,pgl.w,pgl.h);
+    gl.uniform2f(pgl.u.view,view.x,view.y);
+    gl.uniform1f(pgl.u.scale,z*DPR);
+    gl.uniform1f(pgl.u.dpr,DPR);
+    pglDrawBuckets(pgl.aP,pgl.u.off,g,k=>PGL_COL[k]);
+  }
+  return !gl.isContextLost();                        /* lost mid-frame: the Path2D code draws this frame */
+}
+/* GL against the Path2D code, once per lattice, canvas size, model and colouring, on the second
+   GL frame (the first paid for shader compilation): a full GL frame — geometry rebuilt and
+   uploaded, drawn, composited, then read back so the GPU has finished — against the same picture
+   drawn by drawParticlesPath, each into its own scratch canvas (created and warmed up before
+   the clock starts). A small picture is repeated until 16 ms have passed and the time per
+   picture taken (WebKit's clock has 1 ms steps); best of up to three rounds within a quarter
+   second. GL stays only where it is not slower; the numbers are kept in pgl.cal. Where GL
+   loses, the frame on screen is still the GL one; the next frame is Path2D. */
+function pglCalibrate(cal,arr,f,isRaw,j0,j1,z,cellpx,rBase){
+  const scratch=()=>{ const c=document.createElement("canvas"); c.width=cvs.width; c.height=cvs.height;
+    const c2=c.getContext("2d"); c2.fillRect(0,0,2,2); c2.getImageData(0,0,1,1); return c2; };   /* backing store allocated */
+  const cG=scratch(), cP=scratch();
+  const measure=(c2,draw)=>{ const t0=performance.now(); let n=0, t;
+    do{ draw(c2); c2.getImageData(0,0,1,1); n++; t=performance.now()-t0; }while(t<16);
+    return t/n; };
+  /* The GL frame is timed whole (its fixed costs count). The Path2D drawing is timed on the
+     top quarter of the visible rows and extrapolated: its cost is linear in the particles
+     drawn on top of a fixed part (the fills, the background, the readback that waits for an
+     accelerated canvas: 10-15 ms in WebKit), which is timed with no rows and not scaled. The
+     whole drawing would be a 100-200 ms stall at 360², shown once per configuration. */
+  const nrow=j1-j0+1, jq=j0+Math.ceil(nrow/4)-1, scale=nrow/(jq-j0+1);
+  const pathDraw=(c2,jEnd)=>{ c2.setTransform(DPR,0,0,DPR,0,0); c2.fillStyle=BG; c2.fillRect(0,0,CSSW,cssH);
+                              drawParticlesPath(c2,arr,f,isRaw,j0,jEnd,z,cellpx,rBase,true); };
+  const fixed=measure(cP,c2=>pathDraw(c2,j0-1));
+  const start=performance.now();
+  let g=Infinity, p=Infinity;
+  for(let q=0;q<3&&(q===0||performance.now()-start<60);q++){   /* more rounds only while cheap */
+    g=Math.min(g,measure(cG,c2=>{ pgl.key=""; pglRender(arr,f,isRaw,j0,j1,z,cellpx,rBase); c2.setTransform(1,0,0,1,0,0); c2.drawImage(pgl.canvas,0,0); }));
+    const slice=measure(cP,c2=>pathDraw(c2,jq));
+    p=Math.min(p,fixed+scale*Math.max(0,slice-fixed));
+    if(g*2<=p||p*2<=g) break;                        /* a clear winner: no more rounds (a GPU wins 2-20x) */
+  }
+  /* GL stays unless Path2D is clearly faster: a close call is no reason to leave the GPU, and a
+     measurement on a busy machine is noisy (one such run put a 3x faster GL at 1.3x slower) */
+  cal.gl=g; cal.path=p; cal.use=g<=1.5*p;
+}
+/* the squares of drawParticles' small-particle regime, drawn by the GPU; false = not here */
+function drawParticlesGL(arr,f,isRaw,j0,j1,z,cellpx,rBase){
+  if(pgl.retry>performance.now()) return false;      /* resting after a stall (pglSlow) */
+  if(!pglInit()) return false;
+  const ck=sim.W+"|"+cvs.width+"|"+P.model+"|"+(P.pcol==="dir"?"dir":"uni");
+  const cal=pgl.cal[ck]||(pgl.cal[ck]={frames:0,use:true,gl:0,path:0});
+  if(!cal.use) return false;
+  if(!pglRender(arr,f,isRaw,j0,j1,z,cellpx,rBase)) return false;
+  const t0=performance.now();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.drawImage(pgl.canvas,0,0);                     /* device pixels, one to one */
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  pglSlow(performance.now()-t0);
+  pgl.frames++;
+  if(++cal.frames===2) pglCalibrate(cal,arr,f,isRaw,j0,j1,z,cellpx,rBase);
+  return true;
+}
+/* Safety net: a GL that stalls the composite for over 400 ms three frames in a row (the
+   canvas path takes 100–200 ms at 360²) is rested for two seconds — Path2D meanwhile — and
+   then tried and calibrated afresh: a stall under a passing load must not switch the page
+   to Path2D for good. */
+function pglSlow(ms){
+  pgl.slow=ms>400?pgl.slow+1:0;
+  if(pgl.slow>=3){ pgl.slow=0; pgl.cal={}; pgl.retry=performance.now()+2000;
+    console.info("LGCA Lab: the particle view rests WebGL for two seconds (this GL took "+ms.toFixed(0)+" ms a frame)"); }
+}
+/* the particles as Path2D fills on context c: squares (useRect) or circles */
+function drawParticlesPath(c,arr,f,isRaw,j0,j1,z,cellpx,rBase,useRect){
+  const {W,H}=sim;
+  const H3=Math.sqrt(3)/2;
   const paths=[];
   const ncol=P.pcol==="dir"?6:1;
-  for(let c=0;c<ncol;c++) paths.push(new Path2D());
-  const rBase=Math.max(1,0.21*cellpx);
-  const useRect=rBase<1.2;
+  for(let q=0;q<ncol;q++) paths.push(new Path2D());
   const vx0=view.x, vx1=view.x+CSSW/z;
   for(let jj=j0;jj<=j1;jj++){
     const jw=((jj%H)+H)%H;
@@ -1016,8 +1775,26 @@ function drawParticles(arr,f,isRaw){
       }
     }
   }
-  if(ncol===1){ ctx.fillStyle=UNICOL; ctx.fill(paths[0]); }
-  else for(let k=0;k<6;k++){ ctx.fillStyle=DIRCOL[k]; ctx.fill(paths[k]); }
+  if(ncol===1){ c.fillStyle=UNICOL; c.fill(paths[0]); }
+  else for(let k=0;k<6;k++){ c.fillStyle=DIRCOL[k]; c.fill(paths[k]); }
+}
+function drawParticles(arr,f,isRaw){
+  const z=view.zoom, cellpx=s0*z;
+  const H3=Math.sqrt(3)/2;
+  const trails=P.trail!=="off";
+  if(trails&&!needTrailClear){
+    ctx.fillStyle=P.trail==="short"?"rgba(11,14,19,0.30)":"rgba(11,14,19,0.10)";
+    ctx.fillRect(0,0,CSSW,cssH);
+  } else {
+    ctx.fillStyle=BG; ctx.fillRect(0,0,CSSW,cssH);
+    needTrailClear=false;
+  }
+  const j0=Math.floor(view.y/(H3*s0))-1, j1=Math.floor((view.y+cssH/z)/(H3*s0))+1;
+  if($("inGuides").checked && cellpx>=15 && !trails) drawGuides(j0,j1,z,H3);
+  const rBase=Math.max(1,0.21*cellpx);
+  const useRect=rBase<1.2;
+  /* small squares: the GPU path above; otherwise, or where it declines, the Path2D fills */
+  if(!(useRect && drawParticlesGL(arr,f,isRaw,j0,j1,z,cellpx,rBase))) drawParticlesPath(ctx,arr,f,isRaw,j0,j1,z,cellpx,rBase,useRect);
   if(cellpx>=34 && P.model==="boson") drawCounts(arr,f,isRaw,j0,j1,z,H3);
 }
 function drawGuides(j0,j1,z,H3){
@@ -1076,6 +1853,18 @@ function drawCounts(arr,f,isRaw,j0,j1,z,H3){
 }
 
 /* ---------------- main draw ---------------- */
+/* The particle view is redrawn only when something it shows has changed: the lattice frame,
+   the glide, the view, the colouring, the lattice or canvas size, the guides. At the fastest
+   speed there is no glide and a 360² state arrives about ten times a second, so the other
+   frames repeated the same picture; paused, every frame did. Trails fade a little on every
+   frame, so with trails on it always redraws, and needTrailClear (set by every control that
+   changes the drawing) forces a redraw. The fields view redraws every frame as before and
+   drops the key, so coming back to particles redraws too. */
+let lastPKey="", lastPArr=null;
+function particleKey(f,isRaw){
+  return sim.frameT+"|"+(replay.on?replay.slotK:-2)+"|"+f+"|"+isRaw+"|"+view.x+"|"+view.y+"|"+view.zoom+"|"+
+         P.pcol+"|"+P.model+"|"+sim.W+"|"+sim.H+"|"+cvs.width+"|"+cvs.height+"|"+$("inGuides").checked;
+}
 function draw(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   let arr, f, isRaw=false;
@@ -1089,32 +1878,36 @@ function draw(){
   } else {
     arr=sim.src; f=Math.min(1,phase);
   }
-  if(P.mode!=="particles") drawFields(arr);
-  else drawParticles(arr,f||0,isRaw);
+  if(P.mode!=="particles"){ drawFields(arr); lastPArr=null; return; }
+  f=f||0;
+  const key=particleKey(f,isRaw);
+  if(P.trail==="off"&&!needTrailClear&&arr===lastPArr&&key===lastPKey) return;
+  drawParticles(arr,f,isRaw);
+  lastPArr=arr; lastPKey=key;
 }
 
-/* Density diagnostics are display-only and consume no random draws. */
+/* Density diagnostics are display-only (densityStats, in the worker block). The live
+   numbers come with every worker reply; a replay slot is measured here, once per slot. */
 let densityCache={};
-function densityStats(arr){
-  let N=0,max=0,maxChannel=0,sum2=0,occupied=0;
-  for(let b=0;b<arr.length;b+=6){
-    let n=0; for(let k=0;k<6;k++){ n+=arr[b+k]; maxChannel=Math.max(maxChannel,arr[b+k]); }
-    N+=n; max=Math.max(max,n); sum2+=n*n; if(n) occupied++;
-  }
-  return {N,max,maxChannel,occupied,mean:N/(arr.length/6),fraction:N?max/N:0,effectiveArea:sum2?N*N/sum2:0};
-}
 function updateDensityReadout(){
-  const tick=replay.on?replay.k:sim.t, arr=replay.on?replayStreamed():sim.occ;
-  if(densityCache.arr!==arr || densityCache.tick!==tick){ densityCache={arr,tick,m:densityStats(arr)}; }
-  const m=densityCache.m;
+  let tick,m;
+  if(replay.on&&replay.slotK>=0){
+    const arr=replayStreamed(); tick=replay.slotK;
+    if(densityCache.arr!==arr || densityCache.tick!==tick){ densityCache={arr,tick,m:densityStats(arr)}; }
+    m=densityCache.m;
+  } else { tick=sim.t; m=sim._rho; }
+  if(!m) return;
   $("densityReadout").textContent=`Streamed t=${tick} · mean ${m.mean.toFixed(3)} particles/site · peak ${m.max} · peak / N ${(100*m.fraction).toFixed(2)}% · effective occupied area ${m.effectiveArea.toFixed(1)} sites`;
   const log=P.mode!=="particles" && $("inView").value==="countlog";
   $("densityScale").textContent=log?`Log colour scale: 0 → ${Math.max(1,+$("inRhoMax").value||100)} particles/site (white at or above ceiling). Colour saturation is not a density plateau.`:"Density readout uses exact site counts; soft rendering only interpolates pixels.";
 }
 $("bCapture").addEventListener("click",()=>{
   playing=false; $("bPlay").textContent="Play";
-  const arr=new Int32Array(replay.on?replayStreamed():sim.occ), tick=replay.on?replay.k:sim.t;
-  const capturedRng=Array.from(replay.on?replayRngSlot(tick):sim.rng.getState());
+  if(!sim||sim.frameT<0) return;
+  /* the state on screen: a fetched replay slot, or the lattice copy of the last frame */
+  const shownSlot=replay.on&&replay.slotK>=0;
+  const arr=new Int32Array(shownSlot?replayStreamed():sim.occ), tick=shownSlot?replay.slotK:sim.frameT;
+  const capturedRng=Array.from(shownSlot?replay.slotRng:sim.frameRng);
   const old=$("inView").value; $("inView").value="countlog"; buildFieldImage(arr); $("inView").value=old;
   const m=densityStats(arr), settings={...currentSettings(),size:sim.W,dens:sim.dens,seed:sim.initialSeed};
   const label=snapParamLine(settings), ceiling=Math.max(1,+$("inRhoMax").value||100);
@@ -1398,7 +2191,6 @@ function updateAlpha(){
   $("rowAlpha").style.display=P.kernel==="power"?"contents":"none";
   const a=P.kernel==="sum"?0:P.kernel==="avg"?1:P.alpha;
   $("alphaNote").textContent=`α = ${a} · field / Mᵅ. M counts contributing particles; an empty field is unbiased.`;
-  if(sim){ sim.kernel=P.kernel; sim.alpha=P.alpha; }
 }
 segWire("segKernel","kernel",updateAlpha);
 function changeAlpha(value){
@@ -1410,8 +2202,8 @@ $("inAlpha").addEventListener("input",e=>changeAlpha(e.target.value));
 $("numAlpha").addEventListener("change",e=>changeAlpha(e.target.value));
 $("bAlphaDown").addEventListener("click",()=>changeAlpha(+(P.alpha-0.1).toFixed(12)));
 $("bAlphaUp").addEventListener("click",()=>changeAlpha(+(P.alpha+0.1).toFixed(12)));
-segWire("segField","bosonField",()=>{ if(sim){ sim.bosonField=P.bosonField; } });
-segWire("segAlign","bosonAlign",()=>{ if(sim){ sim.bosonAlign=P.bosonAlign; } });
+segWire("segField","bosonField");   // P is sent to the worker with every step request
+segWire("segAlign","bosonAlign");
 segWire("segMode","mode",v=>{
   $("rowsParticles").style.display=v==="particles"?"contents":"none";
   $("rowsFields").style.display=v!=="particles"?"contents":"none";
@@ -1427,21 +2219,21 @@ function frame(now){
   const target=SPEEDS[+$("inSpeed").value];
   const dt=Math.min(0.25,(now-lastFrame)/1000);
   lastFrame=now;
-  if(playing&&sim&&!replay.on){
-    if(target===Infinity){
-      const t0=performance.now(); let did=0;
-      while(performance.now()-t0<12){ sim.step(P.sens); record(); pushReplay(); did++; }
-      spsCount+=did; phase=0; updateBufLabel();
-    } else {
-      phase+=dt*target;
-      let did=0;
-      while(phase>=1&&did<400){ phase-=1; sim.step(P.sens); record(); pushReplay(); did++; }
-      if(did>0){ spsCount+=did; updateBufLabel(); }
-      if(phase>1) phase=1;
-    }
-  } else if(stepAnim>0&&sim){
-    phase=Math.min(1,phase+dt/0.45);
-    if(phase>=1) stepAnim=0;
+  if(playing&&sim&&!replay.on&&queued===0){
+    /* the worker steps on request (maybeSendSteps); here the steps owed accumulate.
+       At a finite speed `phase` counts steps due (a step whenever it reaches 1; the drawn
+       glide is min(1, phase)); it is capped at 400 like the old per-frame loop, so a
+       lattice slower than the chosen speed simply runs as fast as it can. */
+    if(target===Infinity) phase=0;
+    else phase=Math.min(400,phase+dt*target);
+  } else {
+    if(phase>1) phase=1;                        // paused, rewinding or stepping by hand: no backlog
+    if(stepAnim>0&&sim){ phase=Math.min(1,phase+dt/0.45); if(phase>=1) stepAnim=0; }
+  }
+  maybeSendSteps();
+  /* the last reply could not carry the lattice (its buffers were out): ask for it now */
+  if(sim&&spare&&sim.frameT!==sim.t&&!pend.frame&&!pend.stepping&&pend.jumps===0){
+    pend.frame=true; postWithFrame({type:"frame"});
   }
   if(now-spsT0>800){ spsMeter=spsCount/((now-spsT0)/1000); spsCount=0; spsT0=now; $("stSps").textContent=spsMeter<10?spsMeter.toFixed(1):spsMeter.toFixed(0); }
   if(sim){
@@ -1465,12 +2257,13 @@ $("inSpeed").addEventListener("input",()=>{ const v=SPEEDS[+$("inSpeed").value];
   $("lblSpeed").textContent=v===Infinity?"max":(v<1?v+" /s":v+" /s"); });
 $("bPlay").addEventListener("click",()=>{
   if(replay.on) jumpTo(replay.k);
+  clearQueue();
   playing=!playing; $("bPlay").textContent=playing?"Pause":"Play";
 });
 $("bStep1").addEventListener("click",()=>{
   if(replay.on) jumpTo(replay.k);
   playing=false; $("bPlay").textContent="Play";
-  doSteps(1); phase=0; stepAnim=1;
+  animOnReply=true; phase=1; queueSteps(1);   // the glide starts when the step arrives
 });
 const jumpN=()=>Math.max(1,Math.round(+$("inJump").value||1));
 $("bBack1").addEventListener("click",()=>{ back(1); });
@@ -1679,6 +2472,17 @@ colEl.addEventListener("dragend",()=>{
 colEl.addEventListener("toggle",e=>{
   if(e.target.matches("details.card")){ saveCards(); if(cardKey(e.target)==="chart") drawChart(); }
 },true);
+
+/* Console (a developer path; the page has no engine control): labEngine() names the engine
+   of the current run; labEngine("wasm") or labEngine("js") chooses the engine for this page
+   session (nothing is stored) and restarts the run; after a failed WebAssembly load,
+   labEngine("wasm") tries the load again. */
+window.labEngine=function(name){
+  if(name===undefined) return sim?sim.engine:"";
+  if(!isEngine(name)) throw new RangeError('labEngine takes "js" or "wasm"');
+  chooseEngine(name);
+  return name;
+};
 
 buildPresets();
 updateLegends();

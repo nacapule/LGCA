@@ -46,6 +46,15 @@ function verifyHtmlStructureAndDefaults() {
   assert.equal(selectedValue("segKernel"),"sum");
   assert.equal(selectedValue("segField"),"site");
   assert.equal(selectedValue("segAlign"),"nematic");
+  // The engine control was removed from the page (2026-10-01): WebAssembly is simply the
+  // engine, the JavaScript engine (the one this suite tests) is the silent fallback when it
+  // cannot load, and no choice is stored. ?engine= in the URL and labEngine() on the
+  // console stay as developer paths.
+  assert(!/id="segEngine"|id="engineNote"/.test(html),"the page must have no engine control");
+  assert.match(html,/const ENGINE_DEFAULT="wasm"/,"the default engine must be WebAssembly");
+  assert(!/localStorage\.(getItem|setItem)\([^)]*(lgcaEngine|ENGINE_KEY)/.test(html)&&!/ENGINE_KEY/.test(html),
+    "nothing may read or write a stored engine choice (localStorage lgcaEngine)");
+  assert.match(html,/localStorage\.removeItem\("lgcaEngine"\)/,"an old stored engine choice must be removed on load");
   assert.match(html,/<option selected>120<\/option>/,"C++ lattice size 120 must be the default");
   assert.match(html,/id="inSens"[^>]*value="2"/,"C++ sensitivity preset changed unexpectedly");
   assert.match(html,/id="inDens"[^>]*value="0\.4"/,"C++ density preset changed unexpectedly");
@@ -133,6 +142,12 @@ function buildReference(model, tempDir) {
     "    std::cout << sens * dens << \" \"",
     "    std::cout << std::setprecision(17);\n    std::cout << sens * dens << \" \"",
   );
+  // Our one deliberate change to the reference (docs/FIDELITY.md, "Deliberate deviation"):
+  // the band counts channel 0 too, so the reference copy compiled here gets the same line.
+  const BAND_FIX = ["for (int m = 1; m < NODES; ++m) {         // channels (skips 0)",
+                    "for (int m = 0; m < NODES; ++m) {         // channels (all six: band fix)"];
+  assert.equal(cpp.split(BAND_FIX[0]).length, 2, "the reference's band loop is not there once");
+  cpp = cpp.replace(...BAND_FIX);
   cpp = cpp.replace("\n    return 0;\n}", `${probe}\n    return 0;\n}`);
   assert(cpp.includes("__PARITY_STATE__"), "failed to instrument C++ reference");
 
@@ -140,8 +155,10 @@ function buildReference(model, tempDir) {
   const sourcePath = join(tempDir, `reference-${model}.cpp`);
   const binaryPath = join(tempDir, `reference-${model}`);
   writeFileSync(sourcePath, combined);
+  // -ffp-contract=off: clang would otherwise fuse a*b+c into one FMA instruction (one
+  // rounding instead of two); JavaScript never fuses, so the reference must not either.
   execFileSync(process.env.CXX || "c++", [
-    "-std=c++17", "-O2", "-I", join(root, "lgca"), sourcePath, "-o", binaryPath,
+    "-std=c++17", "-O2", "-ffp-contract=off", "-I", join(root, "lgca"), sourcePath, "-o", binaryPath,
   ], {stdio:"inherit"});
   return binaryPath;
 }

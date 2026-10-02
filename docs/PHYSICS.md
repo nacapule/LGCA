@@ -1,56 +1,112 @@
-# Model and what we measure
+# Model and observables
 
-Hexagonal lattice W × H with periodic borders, 6 velocity channels per site. Channel k
-points in direction c_k = (cos(kπ/3), sin(kπ/3)), k = 0,…,5. One step is: first at each
-occupied site the particles change direction (the number of particles in the site
-stays the same), then every particle moves one site in its direction. Total number of
-particles N is conserved.
+The model lives on a hexagonal lattice with six directions at each site.
+At each whole time step, particles first choose their directions and then
+move one site. There is no rest direction. Boundaries are periodic: a
+particle leaving one edge enters through the opposite edge.
 
-Fermions: max one particle per channel. The collision uses the polar field of the 6
-neighbours and 12 Metropolis proposals that permute the channels; a proposal is
-accepted if log(u) < E_trial − E, with E = sensitivity × sum of the alignment field
-over the occupied channels.
+The input `dens` is **particles per channel**, not per site. There are six
+channels, so the expected starting density is `6 × dens` particles per
+site. The actual mean density is `rho = N / (W × H)`, where N is the
+conserved particle total.
 
-Bosons: any number of particles per channel. Each particle of the site picks again its
-direction, independently, from the same collision probability.
+## Fermions and bosons
 
-In the C++ the boson default uses only the site's own particles, nematic alignment
-J_kc = (c_k · c_c)^2 and the field as a sum. For the Sep 30 study we use bosons with
-polar alignment J_kc = c_k · c_c, field from the centre site plus its 6 neighbours, and
-sensitivity s = 6.
+| Model | Occupancy | Reference collision rule |
+|---|---|---|
+| Fermion | At most one particle per channel | Polar alignment with the six neighbouring sites; 12 Metropolis proposals that permute the occupied channels |
+| Boson | Multiple particles per channel | Each particle independently draws a direction from the site's own nematic alignment field |
 
-## Alpha
+For fermions, `dens` is a fill probability in `[0, 1)`.
+For bosons, each channel starts with `floor(dens)` particles, plus one more
+with probability `dens − floor(dens)`, for nonnegative density.
 
-m_k = particles in channel k in the sites that contribute, M = Σ_k m_k. In the study
-this is the centre and the 6 neighbours, counting also the particle that is choosing.
-With w_c = s Σ_k m_k J_kc the probability to go to channel c is
+Channel k has unit vector `c_k = (cos(kπ/3), sin(kπ/3))`, for k = 0…5.
+Polar alignment uses `J_kc = c_k · c_c`: opposite directions cancel.
+Nematic alignment uses `J_kc = (c_k · c_c)²`: opposite directions reinforce
+the same axis.
 
-    p_c = exp((w_c − max_d w_d) / M^alpha)
-          / Σ_d exp((w_d − max_e w_e) / M^alpha).
+A fermion proposal is accepted if `log(u) < E_trial − E`,
+where `E = sensitivity × sum of the alignment field over occupied channels`
+and `u` is a WELL1024a draw in `[0, 1)`.
 
-If M = 0 all 6 directions have probability 1/6. Alpha 0 is the sum, alpha 1 is the
-average per particle. For fermions the neighbour field is divided by M^alpha before the
-Metropolis test. With fixed proportions of directions, the field grows like M^(1−alpha).
+## Field settings and alpha
 
-## What we measure
+A field counts the particles whose directions influence a collision.
 
-The input `dens` is particles per channel, so at the start there are 6 × dens particles
-per site on average. The real average density is rho = N/(W × H). For bosons each
-channel starts with floor(dens) particles, plus one more with probability
-dens − floor(dens).
+| Boson field | Sites counted |
+|---|---|
+| Own site | The central site, including the particle choosing a direction |
+| Neighbours only | The six surrounding sites, excluding the centre |
+| Site plus neighbours | All seven sites, with equal per-particle weights |
 
-Cluster: n_x = Σ_k n_xk is the particles in site x. A site counts if
-n_x ≥ max(1, ceil(2 × rho)), so at least 2 times the average. Sites that count and
-touch (6 neighbours, periodic) make one cluster. The largest cluster is the one with most
-particles, not with most sites.
+Fermions always use the six neighbours. Boson field and alignment choices
+are optional; the reference defaults are **own site, nematic, sum**.
 
-Cluster density = particles of the cluster / number of sites of the cluster, in
-particles per site (0 if no site counts).
+Let `m_k` be the particles in channel k across the sites contributing to
+the field, and `M = Σ_k m_k`. A boson's directional score is
 
-Condensate size N_c = max over x, k of n_xk (`kmax` in the data): the most particles in
-one channel of one site in all the box, like in the 2023 paper. It is not the same as
-the mass of the cluster or the max particles in one site. For the box size runs we make
-W = H bigger with the same dens, so N grows with the area.
+```text
+w_c = sensitivity × Σ_k m_k J_kc
+```
 
-Late values are the mean over steps 15,100 to 20,000 (last quarter of the run), first
-for each run and then over the seeds.
+With power normalization, its probability to choose channel c is
+
+```text
+p_c = exp((w_c − max_d w_d) / M^alpha)
+      / Σ_d exp((w_d − max_e w_e) / M^alpha)
+```
+
+| Kernel | Division | Meaning |
+|---|---|---|
+| Sum | None | More contributing particles make a stronger field |
+| Average | M | Field per contributing particle |
+| Power | M^alpha | Interpolation: alpha 0 gives sum; alpha 1 gives average |
+
+At fixed directional proportions, the normalized score scales as
+`sensitivity × M^(1−alpha)`. This describes the local field; it does not
+by itself prove condensation.
+
+If M is zero, all six boson directions have equal probability.
+For fermions, the neighbour field is divided by the same normalization
+before the Metropolis test.
+
+The study uses polar bosons, site plus neighbours, sensitivity 6, and power
+normalization. Its rules differ from the reference defaults.
+
+## Measurements in the Lab
+
+| Observable | Definition |
+|---|---|
+| Polar | `|Σ n_k c_k| / N`. Close to 1 when particles share a direction. |
+| Nematic | `|Σ n_k (cos 2θ_k, sin 2θ_k)| / N`. Close to 1 when particles share an axis, including opposite directions. |
+| Spatial | `1 − S / ln(W×H)`, with `S = −Σ p_x ln p_x` and `p_x = n_x/N`. Zero for an even spread; one for all particles at one site. |
+| Band | Measures whether surrounding mass lies along an axis. It samples distances 1–4 along six axial directions around each occupied site. |
+
+Band counts **all six channels**. The reference omits channel 0.
+Older band values use that earlier definition; the change affects only
+this measurement.
+
+## Measurements in the study
+
+Let `n_x = Σ_k n_xk` be the population of site x.
+
+A site belongs to the cluster search if
+`n_x ≥ max(1, ceil(2 × rho))`. Adjacent qualifying sites form a component,
+using all six neighbours and periodic boundaries. We select the component
+with the greatest particle mass.
+
+| Measurement | Definition |
+|---|---|
+| Cluster mass | Particles in the selected component |
+| Cluster area | Number of sites in that component |
+| Cluster density | Mass / area, in particles per site; zero if no component qualifies |
+| Condensate occupation N_c | `max over x,k of n_xk`: the largest occupation of a single channel at a single site |
+
+N_c is different from the total population of the most occupied site and
+from the mass or density of a connected cluster.
+
+The published late values average steps 15,100–20,000 within each run,
+then average those run means across seeds. Ranges show the smallest and
+largest seed means. A flat part of a finite curve is not enough to establish
+a limiting density.

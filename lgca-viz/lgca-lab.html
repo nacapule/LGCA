@@ -114,7 +114,7 @@
 </head>
 <body>
 <h1>LGCA Lab</h1>
-<p class="sub">Hexagonal lattice-gas cellular automaton — fermion &amp; boson, exact port of <code>lgca_clean-1.cpp</code> (same WELL1024a random stream). Runs entirely in this file.</p>
+<p class="sub">Hexagonal lattice-gas cellular automaton — fermion &amp; boson, reference dynamics of <code>lgca_clean-1.cpp</code> (same WELL1024a random stream). Runs entirely in this file.</p>
 
 <div class="wrap">
   <div id="stage">
@@ -146,19 +146,19 @@
         <ul>
           <li><b>The model.</b> Each lattice site has 6 channels, one per hexagonal direction. Every step: (1) <b>collision</b> — each site re-picks its channel occupations, conserving its particle count; (2) <b>streaming</b> — every particle hops exactly one site along its channel. There is no rest channel: everything moves at speed 1, every step.</li>
           <li><b>Fermion</b>: at most one particle per channel; collision = 12 Metropolis permutation proposals, energy = sens × polar alignment with the 6 neighbours. <b>Boson</b>: unlimited occupancy; every particle re-draws its channel each step from a Boltzmann law built (by default) from the site's own nematic field.</li>
-          <li><b>Interpolated motion is not a fake.</b> Streaming is defined as "glide one lattice unit along the channel per time step". The glide you see is that exact world line, drawn at constant speed (never eased); direction changes happen exactly at node centres, where collision acts. No particle identity is invented: what is rendered each tick is the post-collision state (site, channel, count) — the model's literal variables. <b>Raw states</b> shows the same states as stroboscopic frames.</li>
+          <li><b>Motion.</b> The model updates at integer steps: particles hop one site along their channel after collision. Interpolated view draws a constant-speed glide between those endpoints; it is a way to show the discrete hop, not an extra rule or a tracked particle identity. <b>Raw states</b> shows the exact streamed lattice at each integer step.</li>
           <li><b>Physics toggles.</b> Defaults marked (C++) reproduce <code>lgca_clean-1.cpp</code> exactly. <i>kernel: average</i> divides the alignment field by the particle count that built it (removing the explicit crowd-size factor at fixed directional composition). The combined <i>average + neighbours + polar</i> settings reproduce the active boson collision rule in <code>lgca_noib.cpp</code>; they do not reproduce that older program's different RNG initialization. <i>power α</i> is the meeting-inspired research extension: divide by M<sup>α</sup>, with exact sum at α=0 and average at α=1. The <i>neighbours only</i> field excludes the centre; <i>site + neighbours</i> includes all seven sites in both the field and the normalization count M. Any non-default toggle is a labelled departure from <code>lgca_clean-1.cpp</code>.</li>
           <li><b>Random-stream equivalence.</b> Same seed + same settings uses the same WELL1024a draws and produces the same states as the corresponding C++ build (MODEL=FERMION or BOSON), verified state-for-state by <code>verify-parity.mjs</code>. Changing sensitivity/kernel mid-run keeps the stated transition rule but is a parameter-change experiment no single C++ run performs. Cross-platform caveat: browser and C++ <code>exp</code>/<code>log</code> libraries can differ in the last bit, so an exceptionally near-threshold random draw could make bitwise trajectories diverge even though the stochastic dynamics are the same.</li>
           <li><b>Replay &amp; time travel.</b> The tool keeps the recent post-collision states in memory. The replay slider scrubs through them view-only (press <i>live</i> to snap back to the newest state). The transport buttons move the <i>actual</i> state: <b>−1</b>/<b>−N</b> restore the exact past lattice <i>and</i> the random-number generator, so stepping forward again reproduces the identical trajectory — unless you change a parameter after rewinding, which starts a deliberate counterfactual branch. <b>+N</b> computes ahead (committing first at the scrub position if you were replaying). Back-stepping is limited to the buffered window. Tip: <kbd>,</kbd> then <kbd>.</kbd> re-runs a single tick with its glide animated.</li>
-          <li><b>Order parameters</b> (all 0→1, computed exactly as in the C++; N = total particles, channel k has unit vector c<sub>k</sub> at angle θ<sub>k</sub> = 60°·k, n<sub>k</sub> = channel occupancy):
+          <li><b>Order parameters</b> (0→1 for a nonempty lattice; N = total particles, channel k has unit vector c<sub>k</sub> at angle θ<sub>k</sub> = 60°·k, n<sub>k</sub> = channel occupancy). Polar, nematic and spatial follow the C++; band includes the channel omitted by the reference:
             <ul>
               <li><b>polar</b> = |Σ n<sub>k</sub>c<sub>k</sub>|/N over all sites and channels — the length of the average velocity vector. Opposite directions cancel; 1 ⇔ everyone moves the same way.</li>
               <li><b>nematic</b> = |Σ n<sub>k</sub>(cos 2θ<sub>k</sub>, sin 2θ<sub>k</sub>)|/N — same sum with doubled angles, so θ and θ+180° add instead of cancelling: measures a shared <i>axis</i>. A perfect flock also scores 1 here.</li>
               <li><b>spatial</b> = 1 − S/ln(W·H), where S = −Σ<sub>occupied sites</sub> p ln p and p = (site population)/N is the Shannon entropy of where particles sit. Even spread → S = ln(W·H) → 0; all particles on one site → 1.</li>
-              <li><b>band</b>: for each occupied site, sum the doubled-angle vectors of the populations on the 24 ring sites at hexagonal distances k = 1–4 along the 6 axial directions (direction of displacement, not velocity) — high when the mass around a site lies on one axis, i.e. stripes. Per-site scores are weighted by the site's own population and averaged over N. Kept arithmetically identical to the C++, including its quirks: channel 0 is excluded everywhere and the site weight counts channels 1–5 once per ring (×4).</li>
+              <li><b>band</b>: for each occupied site, sum the doubled-angle vectors of the populations at distances 1–4 along the 6 lattice directions (direction of displacement, not velocity). Divide the vector length by the sampled population, weight by the central site's population, then average over N. High values mean nearby mass lies mostly along one axis. The Lab counts all six channels; <code>lgca_clean-1.cpp</code> omits channel 0. This deliberate correction affects only the measurement, never the dynamics.</li>
             </ul></li>
           <li><b>Keys</b>: <kbd>space</kbd> play/pause · <kbd>,</kbd> / <kbd>.</kbd> one step back / ahead (ahead animates the glide) · <kbd>[</kbd> / <kbd>]</kbd> jump −N / +N · <kbd>0</kbd> reset view.</li>
-          <li><b>Console API</b>: <code>runBatch({model,tsteps,iters,sens,dens,seed,W,H})</code> mirrors the C++ realization loop (one RNG stream) and prints the same output line; <code>dumpState({...})</code> emits the raw lattice for validation.</li>
+          <li><b>Console API</b>: <code>runBatch({model,tsteps,iters,sens,dens,seed,W,H})</code> mirrors the C++ realization loop (one RNG stream) and prints its output format with the corrected band measurement; <code>dumpState({...})</code> emits the raw lattice for validation.</li>
         </ul>
       </div>
   </details>
@@ -664,12 +664,12 @@ if(typeof window!=="undefined"){ window.runBatch=runBatch; window.dumpState=dump
      step  {n, ms, cfg, band, bufs}   up to n steps, stopping after ms milliseconds
                                       (always at least one step)
      jump  {k, bufs}                  true rewind to buffered tick k: lattice + RNG state
-     slot  {k, buf}                   copy of the buffered post-collision lattice at tick k
+     slot  {k, buf, band}             buffered lattice, RNG and measurements at tick k
      frame {bufs}                     the current lattice, no stepping
    `cfg` carries the live physics controls (sensitivity, kernel, alpha, field,
    alignment); `band` says whether to compute the band order every 10 steps. `bufs`
    are two ArrayBuffers the worker fills with copies of `src` (post-collision) and
-   `occ` (streamed) and transfers back, so nothing is allocated per frame.
+   `occ` (streamed) and transfers back, reusing the large drawing buffers.
 
    Replies echo `type`, `seq`, `epoch` and carry the state after the request: `t`,
    `nuparts`, `rng` (33 words), `m` (measure()), `rho` (densityStats of occ), `range`
@@ -802,6 +802,7 @@ class WasmSim {
    wasmEngine block ("" or absent: only the JavaScript engine can run). */
 function simWorkerMain(port,wasmGlue){
   let sim=null, lastM=null, lastRho=null;
+  let slotOcc=null;                  // reused streamed lattice for view-only replay measurements
   /* the WebAssembly module: loaded on the first init that asks for it; after a failed
      load, again for an init that carries retryWasm (one attempt per request: triedFor) */
   let wasm=null, wasmFailed="", waiting=null, triedFor=null;
@@ -819,7 +820,8 @@ function simWorkerMain(port,wasmGlue){
               note:"the WebAssembly engine refused these settings ("+err.message+"); the JavaScript engine runs instead"};
     }
   }
-  /* replay ring buffer of post-collision states, RNG states and ticks (about 24 MB) */
+  /* Replay lattice storage targets 24 MB, with 20–300 slots. The 20-slot minimum
+     raises it to about 62 MB at 360²; RNG states and tick arrays are additional. */
   let rb=null;
   function newRing(){
     const cap=Math.min(300,Math.max(20,Math.floor(24e6/(sim.W*sim.H*6*4))));
@@ -919,9 +921,18 @@ function simWorkerMain(port,wasmGlue){
     } else if(msg.type==="slot"){
       const i=ringIndex(msg.k), bytes=sim.W*sim.H*6*4;
       const src=msg.buf&&msg.buf.byteLength===bytes?new Int32Array(msg.buf):new Int32Array(bytes/4);
-      let rng=null;
-      if(i>=0){ src.set(rb.slots[i]); rng=new Uint32Array(rb.rng[i]); }
-      port.postMessage({type:"slot",seq:msg.seq,epoch:msg.epoch,k:i>=0?msg.k:null,src,rng},
+      let rng=null,m=null,rho=null,band=null;
+      if(i>=0){
+        src.set(rb.slots[i]); rng=new Uint32Array(rb.rng[i]);
+        if(!slotOcc||slotOcc.length!==src.length) slotOcc=new Int32Array(src.length);
+        streamInto(src,slotOcc,sim.W,sim.H);
+        /* Read the same formulas on the saved lattice without changing the live engine.
+           Keep this work in the worker: band can be expensive on a large lattice. */
+        const at={W:sim.W,H:sim.H,occ:slotOcc,nuparts:sim.nuparts};
+        m=LGCA.prototype.measure.call(at); rho=densityStats(slotOcc);
+        if(msg.band) band=LGCA.prototype.band.call(at);
+      }
+      port.postMessage({type:"slot",seq:msg.seq,epoch:msg.epoch,k:i>=0?msg.k:null,src,rng,m,rho,band},
                        rng?[src.buffer,rng.buffer]:[src.buffer]);
     } else if(msg.type==="frame"){
       reply(msg,{},msg.bufs);
@@ -969,13 +980,12 @@ var createLgcaWasm=(()=>{var _scriptName=globalThis.document?.currentScript?.src
 /* ============================== UI =============================== */
 const $=id=>document.getElementById(id);
 const cvs=$("simCanvas"), ctx=cvs.getContext("2d");
-const ccv=$("chartCanvas"), cctx=cctx0();
-function cctx0(){ return $("chartCanvas").getContext("2d"); }
+const ccv=$("chartCanvas"), cctx=ccv.getContext("2d");
 const SPEEDS=[0.25,0.5,1,2,5,10,20,50,100,200,500,1000,Infinity];
 const CSSW=660;
 const DPR=Math.min(2,window.devicePixelRatio||1);
 const BG="#0b0e13";
-const DIRCOL=["#e5484d","#e0a336","#7fbf3f","#2bbfa3","#4f9de6","#b57bd6"].map(x=>x);
+const DIRCOL=["#e5484d","#e0a336","#7fbf3f","#2bbfa3","#4f9de6","#b57bd6"];
 const DIRARR=["→","↗","↖","←","↙","↘"];
 const UNICOL="#6ec8ff";
 
@@ -991,7 +1001,8 @@ let s0=5.5, cssH=572, worldW=660, worldH=572, shearX=0;
 let needTrailClear=true;
 
 /* replay view state; the ring buffer of past states itself lives in the worker */
-let replay={on:false,T:0,k:-1,occR:null,streamedK:-1,slotK:-1,askedK:-1,slotSrc:null,slotRng:null,spareBuf:null};
+let replay={on:false,T:0,k:-1,occR:null,streamedK:-1,slotK:-1,askedK:-1,slotSrc:null,slotRng:null,
+            slotM:null,slotRho:null,slotBand:null,spareBuf:null};
 
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
@@ -1016,15 +1027,10 @@ let animOnReply=false;    // +1: start the glide when its step arrives
 function clearQueue(){ queued=0; animOnReply=false; queueGen++; }
 const STEP_BUDGET_MS=16;  // the worker steps for about one frame per request
 
-/* The simulation engine: "wasm" (the C++ engine compiled to WebAssembly, the wasmEngine
-   block) or "js" (the same mathematics in the engine block). Both give the same states for
-   the same seed and settings, and WebAssembly is faster, so it is simply the engine: the
-   page offers no control for it (the transport card's control was removed 2026-10-01) and
-   keeps no stored choice. Developer paths only: ?engine=js or ?engine=wasm in the URL for
-   that page load, and labEngine() on the console for this page session. Where WebAssembly
-   cannot load, or refuses the settings, the worker runs the JavaScript engine instead and
-   its init reply says so; the page logs that as a console warning (onHostMessage) and
-   shows nothing. */
+/* WebAssembly is the default engine; JavaScript is its fallback. There is no engine
+   control or saved choice. Developer overrides: ?engine=js|wasm for one load, or
+   labEngine("js"|"wasm") for this page session. The worker reports a fallback reason
+   in its init reply; onHostMessage logs it in the console. */
 const ENGINE_DEFAULT="wasm";
 const isEngine=v=>v==="js"||v==="wasm";
 let engineChoice=(()=>{
@@ -1103,6 +1109,7 @@ function reset(){
   spare={src:new Int32Array(N6),occ:new Int32Array(N6)};
   hist={t:[],p:[],n:[],s:[],rho:[],cfg:[],bt:[],bv:[]};
   replay.slotK=-1; replay.askedK=-1; replay.slotSrc=null; replay.slotRng=null; replay.spareBuf=null;
+  replay.slotM=null; replay.slotRho=null; replay.slotBand=null;
   replay.occR=null; replay.streamedK=-1;
   phase=0; stepAnim=0;
   sizeCanvas();
@@ -1194,10 +1201,11 @@ function finishJump(k){
   hist.t.length=hlen; hist.p.length=hlen; hist.n.length=hlen; hist.s.length=hlen; hist.rho.length=hlen; hist.cfg.length=hlen;
   let blen=hist.bt.length; while(blen>0&&hist.bt[blen-1]>k) blen--;
   hist.bt.length=blen; hist.bv.length=blen;
-  if(blen>0) sim._b=hist.bv[blen-1];
+  sim._b=blen>0?hist.bv[blen-1]:null;
   /* ticks beyond k are gone and may be replaced by a branch: forget any fetched slot */
   if(replay.slotSrc){ replay.spareBuf=replay.slotSrc; replay.slotSrc=null; }
-  replay.slotK=-1; replay.slotRng=null; replay.askedK=-1; replay.streamedK=-1; densityCache={};
+  replay.slotK=-1; replay.slotRng=null; replay.askedK=-1; replay.streamedK=-1;
+  replay.slotM=null; replay.slotRho=null; replay.slotBand=null;
   exitReplay(); phase=1;
   updateBufLabel(); needTrailClear=true; drawChart();
 }
@@ -1228,17 +1236,17 @@ function replaySlot(tick){
   if(replay.slotK!==tick&&replay.askedK!==tick) requestSlot(tick);
   return replay.slotSrc;
 }
-function replayRngSlot(tick){ return replay.slotK===tick?replay.slotRng:null; }
 function requestSlot(tick){
   if(!host||pend.slot) return;
   pend.slot=true; replay.askedK=tick;
   const buf=replay.spareBuf; replay.spareBuf=null;
-  post({type:"slot",k:tick,buf:buf?buf.buffer:null},buf?[buf.buffer]:[]);
+  post({type:"slot",k:tick,buf:buf?buf.buffer:null,band:$("inBand").checked},buf?[buf.buffer]:[]);
 }
 function onSlot(r){
   if(r.k!=null){
     replay.spareBuf=replay.slotSrc;
     replay.slotSrc=r.src; replay.slotRng=r.rng; replay.slotK=r.k; replay.streamedK=-1;
+    replay.slotM=r.m; replay.slotRho=r.rho; replay.slotBand=r.band;
   } else {
     /* the tick asked for is no longer buffered (a batch in flight evicted it). If the
        selection still points at it, move it into the buffered range; a tick in range yet
@@ -1251,7 +1259,8 @@ function onSlot(r){
       if(replay.k===failed) replay.askedK=failed;
     }
   }
-  if(replay.on&&replay.k!==replay.slotK&&replay.k!==replay.askedK) requestSlot(replay.k);   // the slider moved meanwhile
+  if(replay.on&&((replay.k!==replay.slotK&&replay.k!==replay.askedK)||
+      (replay.k===replay.slotK&&$("inBand").checked&&replay.slotBand==null))) requestSlot(replay.k);
 }
 function updateBufLabel(){
   const [a,b]=replayRange();
@@ -1686,8 +1695,9 @@ function pglRender(arr,f,isRaw,j0,j1,z,cellpx,rBase){
    uploaded, drawn, composited, then read back so the GPU has finished — against the same picture
    drawn by drawParticlesPath, each into its own scratch canvas (created and warmed up before
    the clock starts). A small picture is repeated until 16 ms have passed and the time per
-   picture taken (WebKit's clock has 1 ms steps); best of up to three rounds within a quarter
-   second. GL stays only where it is not slower; the numbers are kept in pgl.cal. Where GL
+   picture taken (WebKit's clock has 1 ms steps); up to three rounds while the first
+   60 ms have not elapsed. GL stays unless Path2D is at least 1.5× faster; the numbers
+   are kept in pgl.cal. Where GL
    loses, the frame on screen is still the GL one; the next frame is Path2D. */
 function pglCalibrate(cal,arr,f,isRaw,j0,j1,z,cellpx,rBase){
   const scratch=()=>{ const c=document.createElement("canvas"); c.width=cvs.width; c.height=cvs.height;
@@ -1870,6 +1880,7 @@ function draw(){
   let arr, f, isRaw=false;
   if(replay.on){
     if(P.mode!=="particles"){ arr=replayStreamed(); }
+    else if(P.motion==="raw"){ arr=replayStreamed(); isRaw=true; }
     else { arr=replaySlot(replay.k)||sim.src; f=replay.f; }
   } else if(P.mode!=="particles"){
     arr=sim.occ;
@@ -1886,15 +1897,12 @@ function draw(){
   lastPArr=arr; lastPKey=key;
 }
 
-/* Density diagnostics are display-only (densityStats, in the worker block). The live
-   numbers come with every worker reply; a replay slot is measured here, once per slot. */
-let densityCache={};
+/* Density diagnostics are display-only. The worker supplies them for both the live
+   state and each fetched replay slot. */
 function updateDensityReadout(){
   let tick,m;
   if(replay.on&&replay.slotK>=0){
-    const arr=replayStreamed(); tick=replay.slotK;
-    if(densityCache.arr!==arr || densityCache.tick!==tick){ densityCache={arr,tick,m:densityStats(arr)}; }
-    m=densityCache.m;
+    tick=replay.slotK; m=replay.slotRho;
   } else { tick=sim.t; m=sim._rho; }
   if(!m) return;
   $("densityReadout").textContent=`Streamed t=${tick} · mean ${m.mean.toFixed(3)} particles/site · peak ${m.max} · peak / N ${(100*m.fraction).toFixed(2)}% · effective occupied area ${m.effectiveArea.toFixed(1)} sites`;
@@ -1903,6 +1911,7 @@ function updateDensityReadout(){
 }
 $("bCapture").addEventListener("click",()=>{
   playing=false; $("bPlay").textContent="Play";
+  clearQueue();
   if(!sim||sim.frameT<0) return;
   /* the state on screen: a fetched replay slot, or the lattice copy of the last frame */
   const shownSlot=replay.on&&replay.slotK>=0;
@@ -2056,7 +2065,6 @@ function updateLegends(){
 
 /* ---------------- site inspector ---------------- */
 const sTip=$("siteTip");
-let panMoved=false;
 cvs.addEventListener("mousemove",e=>{
   if(!sim||panning){ return; }
   const r=cvs.getBoundingClientRect();
@@ -2107,7 +2115,7 @@ cvs.addEventListener("mouseleave",()=>{ sTip.style.display="none"; });
 /* ---------------- pan & zoom ---------------- */
 let panning=false, panStart=null;
 cvs.addEventListener("pointerdown",e=>{
-  panning=true; panMoved=false; cvs.classList.add("panning");
+  panning=true; cvs.classList.add("panning");
   panStart={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y};
   cvs.setPointerCapture(e.pointerId);
   sTip.style.display="none";
@@ -2115,7 +2123,6 @@ cvs.addEventListener("pointerdown",e=>{
 cvs.addEventListener("pointermove",e=>{
   if(!panning) return;
   const dx=e.clientX-panStart.x, dy=e.clientY-panStart.y;
-  if(Math.abs(dx)+Math.abs(dy)>3) panMoved=true;
   view.x=panStart.vx-dx/view.zoom;
   view.y=panStart.vy-dy/view.zoom;
   normalizeView();
@@ -2238,13 +2245,16 @@ function frame(now){
   if(now-spsT0>800){ spsMeter=spsCount/((now-spsT0)/1000); spsCount=0; spsT0=now; $("stSps").textContent=spsMeter<10?spsMeter.toFixed(1):spsMeter.toFixed(0); }
   if(sim){
     draw(); updateDensityReadout();
-    $("stT").textContent=replay.on?`${replay.k} (replay)`:sim.t;
+    const shownReplay=replay.on&&replay.slotK>=0;
+    const m=shownReplay?replay.slotM:sim._m;
+    const b=shownReplay?($("inBand").checked?replay.slotBand:null):sim._b;
+    $("stT").textContent=shownReplay?`${replay.slotK} (replay)`:sim.t;
     $("stN").textContent=sim.nuparts;
-    if(sim._m){ $("stOcc").textContent=(100*sim._m.occFrac).toFixed(0)+"%";
-      $("vPol").textContent=sim._m.polar.toFixed(3);
-      $("vNem").textContent=sim._m.nematic.toFixed(3);
-      $("vSpa").textContent=sim._m.spatial.toFixed(3); }
-    if(sim._b!=null) $("vBan").textContent=sim._b.toFixed(3);
+    if(m){ $("stOcc").textContent=(100*m.occFrac).toFixed(0)+"%";
+      $("vPol").textContent=m.polar.toFixed(3);
+      $("vNem").textContent=m.nematic.toFixed(3);
+      $("vSpa").textContent=m.spatial.toFixed(3); }
+    $("vBan").textContent=b!=null?b.toFixed(3):"–";
     drawChart();
   }
   requestAnimationFrame(frame);
@@ -2276,6 +2286,9 @@ $("inReplay").addEventListener("input",e=>{
   enterReplay(+e.target.value); drawChart();
 });
 $("inView").addEventListener("change",updateLegends);
+$("inBand").addEventListener("change",()=>{
+  if(replay.on){ replay.askedK=-1; requestSlot(replay.k); }
+});
 $("bCsv").addEventListener("click",()=>{
   let out="step,polar,nematic,spatial,band,N,mean_count,nmax,peak_fraction,effective_area,sensitivity,alpha,kernel,field,alignment\n", bq=0;
   for(let q=0;q<hist.t.length;q++){
@@ -2297,7 +2310,7 @@ $("bCsv").addEventListener("click",()=>{
   else saveFile();
 });
 document.addEventListener("keydown",e=>{
-  if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT"||e.target.tagName==="TEXTAREA") return;
+  if(e.target.closest("input,select,textarea,button,a,summary")||e.target.isContentEditable) return;
   if(e.code==="Space"){ e.preventDefault(); $("bPlay").click(); }
   else if(e.key==="."){ $("bStep1").click(); }
   else if(e.key===","){ back(1); }
@@ -2309,7 +2322,28 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>
 
 /* ---------------- settings snapshots ---------------- */
 const SNAP_KEY="lgcaSettingsSnapshots";
-function loadSnaps(){ try{ const a=JSON.parse(localStorage.getItem(SNAP_KEY)); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+/* Recipes may come from a shared JSON file or old browser storage. Validate before
+   changing any controls. Custom sizes stay supported; radius-four band requires at
+   least four sites per side, and the cell count must fit the engine's signed int. */
+function validatedSettings(s){
+  if(!s||typeof s!=="object"||Array.isArray(s)) return null;
+  const num=v=>(typeof v==="number"||typeof v==="string"&&v.trim()!=="")?Number(v):NaN;
+  const size=num(s.size),dens=num(s.dens),sens=num(s.sens),seed=num(s.seed);
+  const kernel=s.kernel==null?"sum":s.kernel, alpha=s.alpha==null?0.5:num(s.alpha);
+  const bosonField=s.bosonField==null?"site":s.bosonField, bosonAlign=s.bosonAlign==null?"nematic":s.bosonAlign;
+  if(!["boson","fermion"].includes(s.model)||!Number.isInteger(size)||size<4||size*size*6>0x7fffffff||
+     !Number.isFinite(dens)||dens<0||dens>=0x80000000||!Number.isFinite(sens)||sens<0||
+     !Number.isSafeInteger(seed)||!["sum","avg","power"].includes(kernel)||
+     !Number.isFinite(alpha)||alpha<0||alpha>2||!["site","neigh","both"].includes(bosonField)||
+     !["polar","nematic"].includes(bosonAlign)) return null;
+  /* Reset has always clamped a pending fermion density of 1 or more to .95. Preserve
+     that behavior for recipes saved before Reset and normalize the WELL seed. */
+  return {...s,size,dens:s.model==="fermion"&&dens>=1?0.95:dens,sens,seed:seed>>>0,kernel,alpha,bosonField,bosonAlign};
+}
+function loadSnaps(){
+  try{ const a=JSON.parse(localStorage.getItem(SNAP_KEY)); return Array.isArray(a)?a.map(validatedSettings).filter(Boolean):[]; }
+  catch(e){ return []; }
+}
 function persistSnaps(){ try{ localStorage.setItem(SNAP_KEY,JSON.stringify(snaps)); }catch(e){} }
 let snaps=loadSnaps();
 function currentSettings(){
@@ -2329,6 +2363,8 @@ function setSeg(id,key,v){
    then Reset — deliberately NOT via the segModel click handler, which would
    overwrite sens/dens with model defaults. */
 function applySnap(s){
+  s=validatedSettings(s);
+  if(!s){ alert("Invalid settings. Check the model, numeric values and physics options; lattice size must be an integer of at least 4."); return false; }
   setSeg("segModel","model",s.model);
   const fer=s.model==="fermion";
   $("rowBosonField").style.display=fer?"none":"contents";
@@ -2346,6 +2382,7 @@ function applySnap(s){
   setSeg("segField","bosonField",s.bosonField||"site");
   setSeg("segAlign","bosonAlign",s.bosonAlign||"nematic");
   reset();
+  return true;
 }
 function renderSnaps(){
   const list=$("snapList"); list.textContent="";
@@ -2391,7 +2428,8 @@ function todayStr(){
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 $("bSnapSave").addEventListener("click",()=>{
-  const s=currentSettings();
+  const s=validatedSettings(currentSettings());
+  if(!s){ alert("These settings cannot be saved. Check the numeric values and physics options."); return; }
   s.name=$("snapName").value.trim()||`${s.model} s${s.sens} d${s.dens}`;
   s.desc=$("snapDesc").value.trim();
   s.when=todayStr();
@@ -2413,10 +2451,10 @@ $("snapFile").addEventListener("change",e=>{
     let a=null; try{ a=JSON.parse(txt); }catch(err){}
     if(!Array.isArray(a)){ alert("Not a settings-snapshot .json (expected an array)."); return; }
     let n=0;
-    for(const s of a)
-      if(s&&typeof s==="object"&&s.model&&s.size!=null&&s.dens!=null&&s.sens!=null&&s.seed!=null){ snaps.push(s); n++; }
+    for(const s of a){ const recipe=validatedSettings(s); if(recipe){ snaps.push(recipe); n++; } }
     persistSnaps(); renderSnaps();
     $("bSnapImp").textContent=`imported ${n}`;
+    if(n<a.length) alert(`Imported ${n} settings; skipped ${a.length-n} invalid entries.`);
     setTimeout(()=>$("bSnapImp").textContent="import .json",1500);
   });
   e.target.value="";

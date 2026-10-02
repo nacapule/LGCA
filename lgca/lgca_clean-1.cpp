@@ -23,12 +23,13 @@
 //              from a Boltzmann distribution built from a NEMATIC alignment
 //              field (see note in channel_cdf() about locality).
 //
-//  Build:  g++ -O2 -std=c++17 lgca.cpp -o lgca
+//  Build from the repo root:
+//          c++ -O2 -std=c++17 -ffp-contract=off -x c++ lgca/lgca_clean-1.cpp rng/WELL1024a.c -o lgca.out
 //          add  -DCIMG  (and put CImg.h where the include expects it) for the
 //          live image output; add  -DHISTOG  to dump a per-site occupancy
 //          histogram on the final step.
 //
-//  Run:    ./lgca  <tsteps> <iters> <sens> <dens> [seed]
+//  Run:    ./lgca.out  <tsteps> <iters> <sens> <dens> [seed]
 //            tsteps : number of time steps per realization
 //            iters  : number of independent realizations to average over
 //            sens   : alignment sensitivity
@@ -281,9 +282,9 @@ void measure_order(const LGCA<State>& s, long nuparts, StepStats<State>& out) {
     out.inv_occ  = occupied > 0 ? 1.0 / double(occupied) : 0.0;
 }
 
-// Local nematic "band" order parameter, averaged over occupied sites.
+// Local nematic "band" order parameter, weighted by the central population.
 // Kept arithmetically identical to the original implementation.
-// NOTE: this scan starts the channel loop at k = 1, i.e. it SKIPS channel 0,
+// NOTE: this scan starts the channel loop at m = 1, i.e. it SKIPS channel 0,
 // unlike measure_order() which includes all channels. Verify this is intended.
 template <class State>
 double measure_band(const LGCA<State>& s, long nuparts) {
@@ -329,9 +330,9 @@ int main(int argc, char** argv) {
     const double dens   = std::atof(argv[4]);
 
     // --- seed the WELL1024a generator ---------------------------------------
-    // Seed all 32 state words with DISTINCT values (a one-line LCG mixes them),
-    // so two runs launched in the same second do not share a stream. Pass an
-    // explicit seed as argv[5] for reproducible runs.
+    // Expand one seed into 32 distinct state words with an LCG. Without an
+    // explicit seed, runs started in the same second use the same stream.
+    // Pass argv[5] to choose a reproducible seed.
     unsigned int seed = (argc > 5) ? static_cast<unsigned int>(std::strtoul(argv[5], nullptr, 10))
                                    : static_cast<unsigned int>(std::time(nullptr));
     unsigned int init[32];
@@ -372,7 +373,7 @@ int main(int argc, char** argv) {
         // initialize the lattice
         for (int i = 0; i < XDIM; ++i)
             for (int j = 0; j < YDIM; ++j) {
-                initialize(sim.lattice[i][j], dens);   // floor(dens) per channel (boson)
+                initialize(sim.lattice[i][j], dens);   // integer part per channel (boson)
                 initialize(sim.lattice_temp[i][j]);
             }
         // add the fractional part: each channel gets one more particle with

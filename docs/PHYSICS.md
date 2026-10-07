@@ -110,3 +110,28 @@ The published late values average steps 15,100–20,000 within each run,
 then average those run means across seeds. Ranges show the smallest and
 largest seed means. A flat part of a finite curve is not enough to establish
 a limiting density.
+
+## Islands
+
+The island study uses connected
+occupied sites with no density cutoff. Two sites are connected when both
+hold at least one particle and they are neighbours (six neighbours,
+periodic boundaries). An **island** is a group of connected occupied sites
+together with every occupied site connected to it. Its density is its
+particle count divided by its number of sites.
+
+| Island | Definition |
+|---|---|
+| Busiest site's island | The island that contains the site with the most particles. A tie keeps the first site in index order. |
+| Heaviest island | The island with the most particles |
+| Densest island | The island with the most particles per site. It can be a single site. |
+
+The cluster above keeps only sites at or above the cutoff, while an island
+keeps every occupied site it connects. So the cluster can be denser than
+any island.
+
+At 2.4 particles per site a new lattice has about 95% of its sites
+occupied, more than the site-percolation threshold of the six-neighbour
+lattice, which is 1/2. In the study's runs all of these sites form one
+island at step 0. The busiest site's island separates once the gas between
+piles thins out.

@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LGCA Island Study</title>
+<style>
+/* Top strip, control rail on the left, then either the two charts for one α or a grid of panels, one per α.
+   Colour is N on one log scale shared by both boxes. */
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --surface-2: #e9edf1;
+  --ink: #15202a; --ink-2: #46535f; --muted: #76828c; --line: #dde2e7; --axis: #b4bdc5;
+  --accent: #2a78d6; --focus: #2a78d6;
+  /* N from 1.2 thousand to 1.24 million, log scale: mint, teal, blue, indigo (darker = more particles) */
+  --N0: #7ad4a5; --N1: #34bdab; --N2: #03a0ac; --N3: #0082a6; --N4: #0163a5; --N5: #2d3f96; --N6: #3b1a7a;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --radius: 6px;
+  --shadow: 0 1px 2px rgba(21, 32, 42, 0.06), 0 0 0 1px rgba(21, 32, 42, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121518; --surface: #1b1f24; --surface-2: #262c33; --ink: #eef1f4; --ink-2: #c3cad1; --muted: #8e98a2;
+    --line: #2b3239; --axis: #434c55; --accent: #3987e5; --focus: #6fa8ef;
+    --N0: #3db07c; --N1: #1cbba8; --N2: #33c2cf; --N3: #5fc6ed; --N4: #8fc8fe; --N5: #b9cbff; --N6: #d8d1fe;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121518; --surface: #1b1f24; --surface-2: #262c33; --ink: #eef1f4; --ink-2: #c3cad1; --muted: #8e98a2;
+  --line: #2b3239; --axis: #434c55; --accent: #3987e5; --focus: #6fa8ef;
+  --N0: #3db07c; --N1: #1cbba8; --N2: #33c2cf; --N3: #5fc6ed; --N4: #8fc8fe; --N5: #b9cbff; --N6: #d8d1fe;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.35; -webkit-text-size-adjust: 100%; min-height: 100%; }
+[hidden] { display: none !important; }
+a { color: var(--accent); }
+b, strong { font-weight: 700; }
+kbd { font: inherit; font-size: 10.5px; line-height: 1; padding: 1px 4px; border-radius: 3px; border: 1px solid var(--axis); color: var(--muted); background: var(--surface); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
+
+.app { display: block; min-height: 100vh; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 18px; padding: 8px 14px 6px; border-bottom: 1px solid var(--line); }
+.top h1 { font-size: 19px; font-weight: 700; margin: 0; letter-spacing: -0.01em; white-space: nowrap; }
+.top .line { color: var(--ink-2); font-size: 14px; }
+.top .settings { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
+/* the rail stays in view; charts keep fixed heights and the page scrolls */
+.stage { display: grid; grid-template-columns: 296px minmax(0, 1fr); gap: 12px; padding: 10px 14px; align-items: start; }
+.rail { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow-y: auto; scrollbar-width: thin; display: grid; align-content: start; gap: 9px; padding-right: 2px; }
+.charts { display: grid; gap: 12px; min-width: 0; }
+.card.time > .chart { height: min(max(420px, 52vh), 700px); }
+.card.late > .chart { height: min(max(360px, 40vh), 560px); }
+/* both boxes and several islands: one panel per island */
+.chart.split { height: auto !important; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px; }
+.card.time .chart.split > .chart { height: min(max(380px, 46vh), 600px); }
+.card.late .chart.split > .chart { height: min(max(340px, 38vh), 520px); }
+.grid { display: grid; gap: 8px; min-width: 0; }
+.grid .cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.gsec { grid-column: 1 / -1; font-weight: 650; font-size: 14px; padding: 6px 2px 0; }
+.mini { height: 270px; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); min-height: 0; min-width: 0; display: flex; flex-direction: column; padding: 4px 4px 2px; }
+.mini .chart { flex: 1 1 auto; min-height: 0; }
+.bottom { padding: 6px 14px 10px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2px 28px; border-top: 1px solid var(--line); }
+.bottom details { min-width: 0; }
+.bottom details[open] { flex-basis: 100%; }
+@media (max-width: 900px) {
+  .stage { grid-template-columns: minmax(0, 1fr); padding: 10px 12px; }
+  .rail { position: static; max-height: none; overflow: visible; }
+  .top .settings { margin-left: 0; white-space: normal; }
+}
+
+.blk { display: grid; gap: 5px; padding-left: 3px; }
+.lab { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.q { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--axis); font-size: 11px; color: var(--muted); cursor: help; text-transform: none; letter-spacing: 0; position: relative; }
+.q::after { content: ""; position: absolute; inset: -2px; }
+.q:hover, .q.on, .q:focus-visible { color: var(--ink); border-color: var(--ink-2); }
+/* explanations (data-tip): on hover, on keyboard focus, or pinned by a click on a "?" */
+.pop { position: fixed; z-index: 60; max-width: 320px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,0.18), 0 0 0 1px var(--line); border-radius: 6px; padding: 7px 10px; font-size: 13.5px; line-height: 1.4; white-space: pre-line; pointer-events: none; }
+.pop.pinned { pointer-events: auto; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; background: var(--surface-2); padding: 2px; border-radius: 7px; }
+.seg button {
+  font: inherit; font-size: 13.5px; line-height: 1; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--ink-2);
+  cursor: pointer; font-variant-numeric: tabular-nums; min-height: 30px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+}
+.seg button:hover { color: var(--ink); background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-weight: 700; }
+.seg button:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.6; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+/* boxes and islands: one per row; square marks for toggles, round ones for the presets */
+#route-picks.chips, #rule-picks.chips { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+#route-picks .chip, #rule-picks .chip { width: 100%; }
+#route-picks .chip::before, #rule-picks .chip::before { border-radius: 3px; }
+.chip {
+  font: inherit; font-size: 13.5px; line-height: 1.15; padding: 5px 11px 5px 8px; border-radius: 999px; border: 1px solid var(--axis);
+  background: var(--surface); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-align: left;
+}
+.chip::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--axis); flex: none; }
+.chip:hover { border-color: var(--ink-2); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip[aria-pressed="true"]::before { border-color: var(--bg); background: var(--bg); box-shadow: inset 0 0 0 2.5px var(--ink); }
+.chip kbd { border-color: transparent; background: transparent; color: inherit; opacity: 0.6; padding: 0; }
+.viewblk { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.seg.view { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 9px; }
+.seg.view button { justify-content: center; font-size: 15px; min-height: 36px; padding: 7px 10px; border-radius: 6px; }
+.seg.view button[aria-pressed="true"] { color: var(--accent); }
+.presets .chip { color: var(--ink); }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.check.off { opacity: 0.4; cursor: default; }
+.opts { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
+.keys { font-size: 12px; color: var(--muted); line-height: 1.7; display: flex; flex-wrap: wrap; gap: 0 10px; }
+.keys span { white-space: nowrap; }
+.keys kbd { margin-right: 1px; }
+.hint { font-size: 12.5px; color: var(--muted); }
+
+/* chart cards */
+.card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px 10px 6px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.card .head { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 14px; margin: 0 0 4px; font-size: 13.5px; }
+.card .head h2 { font-size: 15.5px; font-weight: 700; margin: 0 6px 0 0; }
+.legend { display: inline-flex; flex-wrap: wrap; gap: 3px 12px; color: var(--ink-2); }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.nscale { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); margin-left: auto; }
+.nscale svg { display: block; overflow: visible; }
+.nscale text { font-family: var(--font-body); font-size: 11.5px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chart { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.chart text { font-family: var(--font-body); font-size: 13.5px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chart .axis-title { font-size: 14px; fill: var(--ink); }
+.chart .ptitle { font-size: 13px; fill: var(--ink); font-weight: 700; }
+.chart .ptitle .pnote { fill: var(--muted); font-weight: 400; }
+.chart .grid-line { stroke: var(--line); stroke-width: 1; }
+.chart .grid-line.minor { opacity: 0.55; }
+.chart .axis { stroke: var(--axis); stroke-width: 1; }
+.chart .cross { stroke: var(--ink-2); stroke-width: 1; opacity: 0.6; pointer-events: none; }
+.chart .endlabel { font-size: 12.5px; fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.chart .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; text-align: center; padding: 10px; }
+.caption { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caption:empty { display: none; }
+.tablewrap { overflow: auto; max-width: 100%; max-height: 40vh; }
+table.data { border-collapse: collapse; font-size: 13.5px; margin: 4px 0; font-variant-numeric: tabular-nums; }
+table.data th, table.data td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.data th { color: var(--muted); font-weight: 400; font-size: 11.5px; position: sticky; top: 0; background: var(--surface); }
+table.data th:first-child, table.data td:first-child, table.data th.l, table.data td.l { text-align: left; }
+table.data td.dim { color: var(--muted); }
+table.data td.strong { font-weight: 700; }
+
+/* tooltip */
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,0.18), 0 0 0 1px var(--line); border-radius: 6px; padding: 6px 9px; font-size: 13.5px; max-width: 360px; }
+.tip .t { color: var(--muted); font-size: 12.5px; margin-bottom: 3px; }
+.tip .row { display: flex; align-items: center; gap: 7px; line-height: 1.45; white-space: nowrap; }
+.tip .row .v { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
+.tip .row .l { color: var(--ink-2); }
+
+/* bottom folds */
+details.fold summary { cursor: pointer; font-size: 14px; color: var(--ink-2); padding: 3px 0; font-weight: 700; }
+details.fold summary:hover { color: var(--ink); }
+details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
+.defs { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; max-width: 120ch; }
+.defs dt { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.defs dd { margin: 0; }
+@media (max-width: 600px) { .defs { grid-template-columns: 1fr; } .defs dd { margin-bottom: 4px; } }
+.findings ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; max-width: 110ch; }
+.banner { margin: 8px 14px; padding: 8px 12px; border-radius: var(--radius); background: var(--surface); border-left: 4px solid #d03b3b; color: var(--ink); font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { .seg button, .chip { transition: background-color 100ms, color 100ms, border-color 100ms; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Island study</h1>
+    <span class="line">Island density against step, one curve per N; its late value against N.</span>
+    <span class="settings">boson · polar · sens 6 · field: site + 6 nb ÷ M<sup>α</sup> · periodic</span>
+  </header>
+
+  <div class="stage" id="stage">
+    <aside class="rail" id="rail" aria-label="switches">
+      <div class="blk presets" id="presets" role="group" aria-label="presets"></div>
+      <div class="blk viewblk" id="dim-view">
+        <div class="seg view" id="view-seg" role="group" aria-label="view"></div>
+      </div>
+      <div class="blk" id="dim-route">
+        <span class="lab">Route <span class="q" id="q-route" tabindex="0" role="button" aria-label="about the routes">?</span></span>
+        <div id="route-picks"></div>
+        <div class="opts" id="route-opts"></div>
+      </div>
+      <div class="blk" id="dim-rule">
+        <span class="lab">Island <span class="q" id="q-rule" tabindex="0" role="button" aria-label="about the island">?</span></span>
+        <div id="rule-picks"></div>
+      </div>
+      <div class="blk">
+        <span class="lab"><span style="text-transform: none; font-size: 13px">α</span> <span class="q" id="q-alpha" tabindex="0" role="button" aria-label="about alpha" data-tip="Alignment exponent: the field is divided by M^α, where M is the number of particles at the site and its six neighbours. 0 = sum (crowding strengthens alignment), 1 = average.">?</span></span>
+        <div class="seg" id="alpha-seg" role="group" aria-label="alpha"></div>
+        <div class="opts" id="alpha-opts"></div>
+        <span class="hint" id="alpha-hint"></span>
+      </div>
+      <div class="keys"><span><kbd>←</kbd><kbd>→</kbd> α</span><span><kbd>1</kbd>–<kbd>3</kbd> island</span><span><kbd>R</kbd> route</span><span><kbd>G</kbd> one/all α</span></div>
+    </aside>
+
+    <div class="charts" id="charts">
+      <section class="card time" id="time">
+        <div class="head"><h2 id="time-title">Island density over time</h2><div class="legend" id="time-legend"></div><div class="nscale" id="time-nscale"></div></div>
+        <div class="chart" id="time-chart"></div>
+        <p class="caption" id="time-caption"></p>
+      </section>
+      <section class="card late" id="late">
+        <div class="head"><h2 id="late-title">Late island density against N</h2><div class="legend" id="late-legend"></div><div class="nscale" id="late-nscale"></div></div>
+        <div class="chart" id="late-chart"></div>
+        <p class="caption" id="late-caption"></p>
+      </section>
+    </div>
+    <div class="grid" id="gridview" hidden>
+      <div class="card" style="padding: 6px 10px"><div class="head"><h2 id="grid-title">Island density over time, every α</h2><div class="legend" id="grid-legend"></div><div class="nscale" id="grid-nscale"></div></div><p class="caption" id="grid-caption"></p></div>
+      <div class="cells" id="grid-cells"></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div id="load-error" hidden></div>
+    <details class="fold" id="numbers-fold"><summary>Numbers: late values in the chart</summary><div class="body"><div class="tablewrap" id="late-numbers"></div></div></details>
+    <details class="fold" id="defs-fold"><summary>Definitions &amp; notes</summary><div class="body"><dl class="defs" id="defs-body"></dl></div></details>
+    <details class="fold" id="findings-fold"><summary>Notes from the runs</summary><div class="body findings" id="findings-slot" aria-live="polite"></div></details>
+  </div>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+<div class="pop" id="pop" hidden role="tooltip"></div>
+
+<!-- the notes at the bottom of the page: [{"title": ..., "text": ...}, ...] -->
+<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over the end of the runs (steps 60,100 to 80,000; the densest island at the lattices of steps 60,000 and 80,000), the new island's density grows 6.6 to 78 times, the old cluster's 4.9 to 37 times and the densest island's 7.8 to 92 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. These windows are past the end of the charts; the values are in the data files."}, {"title": "At α ≤ 0.8 the density levels off, higher in bigger boxes.", "text": "Between steps 40,000–60,000 and 60,000–80,000 it changes by less than 1% at α ≤ 0.5 and by 1 to 8% at α 0.8. At α ≤ 0.5 the busiest site stays the same from step 5,000 to 80,000 in 59 of 62 runs."}, {"title": "α 0.85 to 0.94 has not settled by step 80,000.", "text": "In the larger boxes the island density still changes by −16% to +56% between the same two windows."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 1.0 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved at step 5,000 and later, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 90% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are trends at finite times and box sizes. The densest island is known only at the saved lattices."}]</script>
+<script id="page-data" type="application/json"></script>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- boxes and islands ---------- */
+const CUT = 20000;                 // the denser-box runs end here, and so do the charts
+const MATCH_RATIO = 1.25;          // two N are "matched" when they differ by less than this factor
+const ROUTES = {
+  density: { label: "Denser 90 × 90 box", chip: "Denser 90×90", short: "denser box",
+             def: "90 × 90 box, 0.15 to 14.4 particles per site (N = 1.2k to 117k), to step 20,000; 25 α; 4 to 5 seeds." },
+  size:    { label: "Larger box, 2.4 per site", chip: "Larger box", short: "larger box",
+             def: "2.4 particles per site, side L = 60 to 480 (N = 8.6k to 553k); L = 720 (1.24M) at α = 0.8, 0.9, 0.94, 1; shown to step 20,000; 10 α; 5 seeds to L 240, 3 above, 2 at L 720." },
+};
+const ROUTE_ORDER = ["density", "size"];
+const DRAW_ORDER = ["size", "density"];           // the denser box on top
+const RULES = {
+  old:     { label: "old", chip: "old", short: "old", cp: false, key: "rhoOld",
+             def: "Among connected sets of sites holding at least twice the mean occupation, max(1, ⌈2N/A⌉) particles (A = number of sites), the one with the most particles. Every sample step." },
+  busiest: { label: "new", chip: "new", short: "new", cp: false, key: "rho",
+             def: "The island containing the site with the most particles: every occupied site connected to it. Every sample step." },
+  densest: { label: "densest", chip: "densest", short: "densest", cp: true, key: "rhoDensest",
+             def: "Of all islands (each a whole group of connected occupied sites), the one with the most particles per site (particles ÷ sites). Saved lattices only: 7 points per curve.",
+             caveat: "A lone site counts as an island: at α ≤ 0.75 it is then a pile of 14 to 3,940 particles; at α ≥ 0.83 it is sometimes a lone site with 2 to 7 particles." },
+};
+const RULE_ORDER = ["old", "busiest", "densest"];
+const CP_STEPS = "100, 500, 1k, 2k, 5k, 10k, 20k";
+
+/* ---------- small helpers ---------- */
+const $ = (id) => document.getElementById(id);
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k === "style" && typeof v === "object") for (const [p, val] of Object.entries(v)) { if (p.startsWith("--")) el.style.setProperty(p, val); else el.style[p] = val; }
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) if (c != null) el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return el;
+}
+function s(tag, attrs, ...children) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v);
+  }
+  for (const c of children.flat()) if (c != null) el.append(c);
+  return el;
+}
+const uniq = (arr) => [...new Set(arr)].sort((a, b) => a - b);
+const isNum = (v) => typeof v === "number" && isFinite(v);
+function fmt(v, sig = 3) {
+  if (!isNum(v)) return "–";
+  const a = Math.abs(v);
+  if (a >= 1000) return Math.round(v).toLocaleString("en-US");
+  if (a >= 100) return v.toFixed(0);
+  if (a >= 10) return v.toFixed(1);
+  if (a >= 1) return v.toFixed(2);
+  if (a === 0) return "0";
+  return String(+v.toPrecision(sig));
+}
+function fmtN(v) {
+  if (!isNum(v)) return "–";
+  if (v >= 1e6) return +(v / 1e6).toPrecision(3) + "M";
+  if (v >= 1e3) return +(v / 1e3).toPrecision(3) + "k";
+  return String(Math.round(v));
+}
+function fmtStep(v) { if (!isNum(v)) return "–"; if (v >= 1000) return +(v / 1000).toPrecision(3) + "k"; return String(v); }
+function fmtTick(v) {
+  if (v >= 1e6) return +(v / 1e6).toPrecision(3) + "M";
+  if (v >= 1e3) return +(v / 1e3).toPrecision(3) + "k";
+  if (v >= 1) return String(+v.toPrecision(3));
+  return String(+v.toPrecision(2));
+}
+const fmtDens = (perSite) => String(+perSite.toPrecision(3));
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function hexToRgb(hex) { const n = parseInt(hex.replace("#", ""), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function mix(hexA, hexB, t) { const a = hexToRgb(hexA), b = hexToRgb(hexB); return "rgb(" + a.map((x, i) => Math.round(x + (b[i] - x) * t)).join(",") + ")"; }
+function rampColor(stops, t) { t = Math.max(0, Math.min(1, t)); const k = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(k)); return mix(stops[i], stops[i + 1], k - i); }
+
+/* ---------- colour = N ---------- */
+let nStops = [];
+function refreshStops() { nStops = [0, 1, 2, 3, 4, 5, 6].map((i) => cssVar("--N" + i) || "#888"); }
+function nT(N) { return (Math.log10(N) - Math.log10(model.Nmin)) / (Math.log10(model.Nmax) - Math.log10(model.Nmin) || 1); }
+function nColor(N) { return rampColor(nStops, nT(N)); }
+
+/* ---------- line samples: style = { width, dash, markers, connector, shape, hollow, endMarker } ---------- */
+function markerPath(shape, cx, cy, r) {
+  if (shape === "diamond") { const d = r * 1.25; return s("path", { d: "M" + cx + " " + (cy - d) + "L" + (cx + d) + " " + cy + "L" + cx + " " + (cy + d) + "L" + (cx - d) + " " + cy + "Z" }); }
+  return s("circle", { cx, cy, r });
+}
+function glyph(style, color) {
+  const svg = s("svg", { class: "glyph", viewBox: "0 0 30 12", "aria-hidden": "true" });
+  const w = style.width || 2.4;
+  if (style.endMarker) {          // a box: its line weight and, at the end, its marker
+    svg.append(s("line", { x1: 1, x2: 20, y1: 6, y2: 6, style: "stroke:" + color + ";stroke-width:" + w + ";stroke-linecap:round" }));
+    const mk = markerPath("circle", 25.5, 6, 3.3); mk.setAttribute("style", "fill:" + (style.hollow ? "none" : color) + ";stroke:" + color + ";stroke-width:" + (style.hollow ? 1.5 : 0)); svg.append(mk);
+  } else if (style.markers) {
+    const ls = style.connector ? "stroke-width:1.2;opacity:0.55;stroke-dasharray:2 3" : "stroke-width:" + Math.min(w, 2) + ";opacity:0.75" + (style.dash ? ";stroke-dasharray:" + style.dash : "");
+    svg.append(s("line", { x1: 1, x2: 29, y1: 6, y2: 6, style: "stroke:" + color + ";" + ls }));
+    for (const cx of [5, 15, 25]) { const mk = markerPath(style.shape, cx, 6, 3.4); mk.setAttribute("style", "fill:" + (style.hollow ? "none" : color) + ";stroke:" + color + ";stroke-width:" + (style.hollow ? 1.5 : 0)); svg.append(mk); }
+  } else {
+    svg.append(s("line", { x1: 1, x2: 29, y1: 6, y2: 6, style: "stroke:" + color + ";stroke-width:" + w + ";stroke-linecap:round" + (style.dash ? ";stroke-dasharray:" + style.dash : "") }));
+  }
+  return svg;
+}
+
+/* ---------- tooltip ---------- */
+const tip = $("tip");
+function showTip(ev, title, rows) {
+  tip.replaceChildren();
+  if (title) tip.append(h("div", { class: "t", text: title }));
+  for (const r of rows) {
+    const row = h("div", { class: "row" });
+    if (r.style) row.append(glyph(r.style, r.color));
+    row.append(h("span", { class: "v", text: r.value }));
+    if (r.label) row.append(h("span", { class: "l", text: r.label }));
+    tip.append(row);
+  }
+  tip.hidden = false; moveTip(ev);
+}
+function moveTip(ev) {
+  const pad = 14, w = tip.offsetWidth, hh = tip.offsetHeight;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
+  if (y + hh > window.innerHeight - 8) y = Math.max(4, window.innerHeight - hh - 8);
+  tip.style.left = Math.max(4, x) + "px"; tip.style.top = Math.max(4, y) + "px";
+}
+function hideTip() { tip.hidden = true; }
+
+/* ---------- scales & ticks ---------- */
+function makeScale(type, domain, range) {
+  const [d0, d1] = domain, [r0, r1] = range;
+  let f;
+  if (type === "log") {
+    const l0 = Math.log10(d0), l1 = Math.log10(d1);
+    f = (v) => r0 + (Math.log10(v) - l0) / (l1 - l0) * (r1 - r0);
+    f.ticks = (compact) => logTicks(d0, d1, compact);
+  } else {
+    f = (v) => r0 + (v - d0) / (d1 - d0) * (r1 - r0);
+    f.ticks = (compact) => linearTicks(d0, d1, compact ? 3 : 5);
+  }
+  f.type = type; f.domain = domain;
+  return f;
+}
+function logTicks(d0, d1, compact) {
+  const e0 = Math.floor(Math.log10(d0)), e1 = Math.ceil(Math.log10(d1));
+  const decades = Math.log10(d1) - Math.log10(d0);
+  const major = [], minor = [];
+  for (let e = e0; e <= e1; e++) for (let m = 1; m < 10; m++) {
+    const v = +(m * Math.pow(10, e)).toPrecision(12);
+    if (v < d0 || v > d1) continue;
+    if (m === 1 || (!compact && ((m === 2 || m === 5) && decades <= 2.6)) || (!compact && m === 3 && decades <= 1)) major.push(v); else minor.push(v);
+  }
+  if (major.length < 2) { major.push(...minor.filter((v, i) => compact ? [2, 5].includes(Math.round(v / Math.pow(10, Math.floor(Math.log10(v))))) : true)); minor.length = 0; major.sort((a, b) => a - b); }
+  return { major, minor };
+}
+function linearTicks(d0, d1, n = 5) {
+  const span = d1 - d0 || 1;
+  const base = Math.pow(10, Math.floor(Math.log10(span / n)));
+  const step = [1, 2, 2.5, 5, 10].map((k) => k * base).find((st) => span / st <= n * 1.5) || 10 * base;
+  const major = [];
+  for (let v = Math.ceil(d0 / step - 1e-9) * step; v <= d1 + 1e-9; v += step) major.push(+v.toFixed(10));
+  return { major, minor: [] };
+}
+function padDomain(lo, hi, type, f) {
+  if (type === "log") {
+    lo = Math.max(lo, 1e-9);
+    if (hi <= lo) return [lo / 3, lo * 3];
+    const a = Math.log10(lo), b = Math.log10(hi), p = Math.max((b - a) * f, 0.04);
+    return [Math.pow(10, a - p), Math.pow(10, b + p)];
+  }
+  if (hi <= lo) { const w = Math.abs(lo) * 0.5 || 1; return [lo >= 0 && lo - w < 0 ? 0 : lo - w, lo + w]; }
+  const p = (hi - lo) * f;
+  return [lo >= 0 && lo - p < 0 ? 0 : lo - p, hi + p];
+}
+
+/* ---------- the line chart ----------
+   spec: { x: {type, label, domain?}, y: {type, label, domain?}, compact, title, titleNote, aria, emptyText,
+           series: [{ color, points: [[x, y]], width, opacity, dash, markers, shape, hollow, connector, line,
+                      markerColor(i), endLabel, tipLabel, style, tipRows(i) }],
+           ranges: [{x, lo, hi, color}], hover: "x" | "point", tipTitle(x) } */
+function drawLineChart(host, spec) {
+  host.replaceChildren();
+  const compact = !!spec.compact;
+  const W = Math.max(compact ? 120 : 200, host.clientWidth || 800);
+  const measured = host.clientHeight;
+  const narrow = W < 560;
+  const H = measured >= (compact ? 60 : 120) ? measured : (narrow ? 340 : 460);
+  const hasEnd = !compact && spec.series.some((sr) => sr.endLabel);
+  const logX = spec.x.type === "log", logY = spec.y.type === "log";
+  const ok = (x, y) => isNum(x) && isNum(y) && (!logX || x > 0) && (!logY || y > 0);
+  const xs = [], ys = [];
+  for (const sr of spec.series) for (const [x, y] of sr.points) if (ok(x, y)) { xs.push(x); ys.push(y); }
+  for (const r of spec.ranges || []) { if (isNum(r.lo) && (!logY || r.lo > 0)) ys.push(r.lo); if (isNum(r.hi)) ys.push(r.hi); }
+  if (!xs.length) { host.append(h("div", { class: "empty", text: spec.emptyText || "No data." })); return; }
+  const xd = spec.x.domain || padDomain(Math.min(...xs), Math.max(...xs), spec.x.type, 0.03);
+  const yd = spec.y.domain || padDomain(Math.min(...ys), Math.max(...ys), spec.y.type, 0.07);
+  const yTick = fmtTick;
+  // the left margin fits the widest y label and the axis title
+  const yAll = logY ? logTicks(yd[0], yd[1], compact) : linearTicks(yd[0], yd[1], compact ? 3 : 5);
+  const labW = Math.max(2, ...yAll.major.map((v) => yTick(v).length)) * (compact ? 6.8 : 8.2);
+  const m = compact ? { top: 18, right: 8, bottom: 22, left: 10 + labW } : { top: spec.title ? 28 : 10, right: hasEnd ? (narrow ? 50 : 64) : 16, bottom: narrow ? 42 : 44, left: 28 + labW };
+  const pw = W - m.left - m.right, ph = H - m.top - m.bottom;
+  const X = makeScale(spec.x.type, xd, [m.left, m.left + pw]);
+  const Y = makeScale(spec.y.type, yd, [m.top + ph, m.top]);
+  const svg = s("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": spec.aria || "" });
+  const gGrid = s("g"), gAxes = s("g"), gData = s("g"), gLabels = s("g"), gHover = s("g");
+  // tick labels never touch: decades first, then 2 and 5 where there is room
+  const isDecade = (v) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9;
+  const thin = (major, scale, minGap, log) => {
+    const kept = [], fits = (v) => kept.every((k) => Math.abs(scale(k) - scale(v)) >= minGap);
+    const pri = log ? major.filter(isDecade) : major, sec = log ? major.filter((v) => !isDecade(v)) : [];
+    for (const v of pri) if (fits(v)) kept.push(v);
+    for (const v of sec) if (fits(v)) kept.push(v);
+    return kept.sort((a, b) => a - b);
+  };
+  const xt0 = X.ticks(compact), yt0 = Y.ticks(compact);
+  const xt = { major: thin(xt0.major, X, compact ? 34 : 48, logX), minor: xt0.minor }, yt = { major: thin(yt0.major, Y, compact ? 15 : 17, logY), minor: yt0.minor };
+  if (!compact) {
+    for (const v of yt.minor) gGrid.append(s("line", { class: "grid-line minor", x1: m.left, x2: m.left + pw, y1: Y(v), y2: Y(v) }));
+    for (const v of xt.minor) gGrid.append(s("line", { class: "grid-line minor", y1: m.top, y2: m.top + ph, x1: X(v), x2: X(v) }));
+  }
+  for (const v of yt.major) {
+    gGrid.append(s("line", { class: "grid-line", x1: m.left, x2: m.left + pw, y1: Y(v), y2: Y(v) }));
+    gAxes.append(s("text", { x: m.left - 5, y: Y(v) + 3.5, "text-anchor": "end", style: compact ? "font-size:11.5px" : null, text: yTick(v) }));
+  }
+  for (const v of xt.major) {
+    gGrid.append(s("line", { class: "grid-line", y1: m.top, y2: m.top + ph, x1: X(v), x2: X(v) }));
+    gAxes.append(s("text", { x: X(v), y: m.top + ph + (compact ? 13 : 16), "text-anchor": "middle", style: compact ? "font-size:11.5px" : null, text: fmtTick(v) }));
+  }
+  gAxes.append(s("line", { class: "axis", x1: m.left, x2: m.left + pw, y1: m.top + ph, y2: m.top + ph }));
+  gAxes.append(s("line", { class: "axis", x1: m.left, x2: m.left, y1: m.top, y2: m.top + ph }));
+  if (!compact) {
+    gAxes.append(s("text", { class: "axis-title", x: m.left + pw / 2, y: H - 5, "text-anchor": "middle", "data-fit": pw, text: spec.x.label }));
+    gAxes.append(s("text", { class: "axis-title", transform: "translate(13 " + (m.top + ph / 2) + ") rotate(-90)", "text-anchor": "middle", "data-fit": ph, text: spec.y.label }));
+  }
+  if (spec.title) { const t = s("text", { class: "ptitle", x: m.left, y: compact ? 12 : 18, text: spec.title }); if (spec.titleNote) t.append(s("tspan", { class: "pnote", dx: 8, text: spec.titleNote })); gAxes.append(t); }
+  // seed-range bars
+  for (const r of spec.ranges || []) {
+    if (!ok(r.x, r.lo) || !ok(r.x, r.hi)) continue;
+    const x = X(r.x), y1 = Y(r.lo), y2 = Y(r.hi);
+    const st = "stroke:" + r.color + ";stroke-width:1.5;opacity:0.85";
+    gData.append(s("line", { x1: x, x2: x, y1, y2, style: st }), s("line", { x1: x - 4, x2: x + 4, y1, y2: y1, style: st }), s("line", { x1: x - 4, x2: x + 4, y1: y2, y2, style: st }));
+  }
+  // lines and markers
+  const ends = [];
+  for (const sr of spec.series) {
+    const pts = [];
+    sr.points.forEach(([x, y], i) => { if (ok(x, y)) pts.push({ x, y, i }); });
+    if (!pts.length) continue;
+    const r = compact ? 2.8 : (narrow ? 3.6 : 4.4);
+    if (!sr.markers || sr.connector || sr.line) {
+      let d = "", pen = false;
+      for (const [x, y] of sr.points) { if (!ok(x, y)) { pen = false; continue; } d += (pen ? "L" : "M") + X(x).toFixed(1) + " " + Y(y).toFixed(1); pen = true; }
+      const style = sr.connector
+        ? "stroke:" + sr.color + ";stroke-width:1;opacity:0.5;stroke-dasharray:2 4;stroke-linecap:round"
+        : "stroke:" + sr.color + ";stroke-width:" + (compact ? Math.max(1, (sr.width || 2) * 0.7) : (sr.width || 2)) + ";opacity:" + (sr.opacity ?? 1) + ";stroke-linejoin:round;stroke-linecap:round" + (sr.dash ? ";stroke-dasharray:" + (compact ? "4 3" : sr.dash) : "");
+      gData.append(s("path", { d, fill: "none", style }));
+    }
+    if (sr.markers) for (const p of pts) {
+      const c = sr.markerColor ? sr.markerColor(p.i) : sr.color;
+      const mk = markerPath(sr.shape || "circle", X(p.x), Y(p.y), r);
+      mk.setAttribute("style", sr.hollow ? "fill:var(--surface);stroke:" + c + ";stroke-width:2" : "fill:" + c + ";stroke:var(--surface);stroke-width:1.2;opacity:" + (sr.opacity ?? 1));
+      gData.append(mk);
+    }
+    if (sr.endLabel && !compact) { const last = pts[pts.length - 1]; ends.push({ x: X(last.x), y: Y(last.y), y0: Y(last.y), text: sr.endLabel }); }
+  }
+  // end labels: one per curve end, duplicates merged, overlapping ones pushed apart vertically
+  const gap = 15, labelW = 46, kept = [];
+  for (const e of ends) { const dup = kept.find((k) => k.text === e.text && Math.abs(k.x - e.x) < labelW && Math.abs(k.y0 - e.y0) < 6); if (!dup) kept.push(e); }
+  kept.sort((a, b) => a.y0 - b.y0);
+  for (let i = 0; i < kept.length; i++) { let y = kept[i].y0; for (let j = 0; j < i; j++) if (Math.abs(kept[j].x - kept[i].x) < labelW && y < kept[j].y + gap) y = kept[j].y + gap; kept[i].y = y; }
+  const over = kept.length ? Math.max(...kept.map((e) => e.y)) - (m.top + ph) : 0;
+  if (over > 0) for (const e of kept) e.y -= over;
+  for (const e of kept) gLabels.append(s("text", { class: "endlabel", x: e.x + 6, y: e.y + 4, text: e.text }));
+  svg.append(gGrid, gAxes, gData, gLabels, gHover);
+  host.append(svg);
+  // an axis title longer than its plot side is squeezed to fit
+  for (const t of svg.querySelectorAll("text.axis-title[data-fit]")) {
+    const avail = +t.getAttribute("data-fit") - 6;
+    if (t.getComputedTextLength() > avail) { t.setAttribute("textLength", Math.max(10, avail)); t.setAttribute("lengthAdjust", "spacingAndGlyphs"); }
+  }
+  // hover
+  const cross = s("line", { class: "cross", y1: m.top, y2: m.top + ph, x1: 0, x2: 0 }); cross.style.display = "none";
+  const dotHi = s("circle", { r: 7, style: "fill:none;stroke:var(--ink);stroke-width:2" }); dotHi.style.display = "none";
+  gHover.append(cross, dotHi);
+  const tipSeries = spec.series;
+  if (spec.hover === "x") {
+    const xset = uniq(tipSeries.flatMap((sr) => sr.points.filter(([x, y]) => ok(x, y)).map(([x]) => x)));
+    const px = xset.map((x) => X(x));
+    const valid = tipSeries.map((sr) => sr.points.filter(([x, y]) => ok(x, y)));
+    const tol = Math.log10(1.03);
+    const nearest = (pts, xv) => {
+      let lo = 0, hi = pts.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (pts[mid][0] < xv) lo = mid; else hi = mid; }
+      const best = Math.abs(Math.log10(pts[lo][0] / xv)) <= Math.abs(Math.log10(pts[hi][0] / xv)) ? pts[lo] : pts[hi];
+      return (logX ? Math.abs(Math.log10(best[0] / xv)) <= tol : Math.abs(best[0] - xv) <= 0.03 * xv) ? best : null;
+    };
+    svg.addEventListener("pointermove", (ev) => {
+      const rc = svg.getBoundingClientRect(); const mx = (ev.clientX - rc.left) * (W / rc.width);
+      if (!px.length) return;
+      let lo = 0, hi = px.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (px[mid] < mx) lo = mid; else hi = mid; }
+      const i = Math.abs(px[lo] - mx) <= Math.abs(px[hi] - mx) ? lo : hi;
+      const xv = xset[i];
+      cross.setAttribute("x1", px[i]); cross.setAttribute("x2", px[i]); cross.style.display = "";
+      const rows = [];
+      tipSeries.forEach((sr, k) => { if (!valid[k].length) return; const p = nearest(valid[k], xv); if (p) rows.push({ color: sr.color, style: sr.style, value: fmt(p[1]), label: sr.tipLabel, y: p[1] }); });
+      rows.sort((a, b) => b.y - a.y);
+      showTip(ev, (spec.tipTitle || ((x) => fmtTick(x)))(xv), rows);
+    });
+    svg.addEventListener("pointerleave", () => { cross.style.display = "none"; hideTip(); });
+  } else {
+    const pts = [];
+    tipSeries.forEach((sr) => sr.points.forEach(([x, y], k) => { if (ok(x, y)) pts.push({ x: X(x), y: Y(y), xv: x, yv: y, sr, k }); }));
+    svg.addEventListener("pointermove", (ev) => {
+      const rc = svg.getBoundingClientRect(); const mx = (ev.clientX - rc.left) * (W / rc.width), my = (ev.clientY - rc.top) * (H / rc.height);
+      let best = null, bd = 30 * 30;
+      for (const p of pts) { const d = (p.x - mx) ** 2 + (p.y - my) ** 2; if (d < bd) { bd = d; best = p; } }
+      if (!best) { dotHi.style.display = "none"; hideTip(); return; }
+      dotHi.setAttribute("cx", best.x); dotHi.setAttribute("cy", best.y); dotHi.style.display = "";
+      const t = best.sr.tipRows ? best.sr.tipRows(best.k) : { title: best.sr.tipLabel, rows: [{ color: best.sr.color, value: fmt(best.yv) }] };
+      showTip(ev, t.title, t.rows);
+    });
+    svg.addEventListener("pointerleave", () => { dotHi.style.display = "none"; hideTip(); });
+  }
+}
+
+/* ---------- data model ---------- */
+function buildModel(data) {
+  const size = data.size || { steps: [], entries: [] };
+  const dens = data.density || { steps: [], entries: [] };
+  const entries = {
+    size: size.entries.map((e) => Object.assign({}, e, { route: "size", N: e.late.N, desc: "L " + e.L, descLong: "L = " + e.L + " (" + fmt(e.late.mean) + " per site)" })),
+    density: dens.entries.map((e) => Object.assign({}, e, { route: "density", N: e.N, desc: fmtDens(e.dens * 6) + " per site", descLong: fmtDens(e.dens * 6) + " particles per site (90 × 90)" })),
+  };
+  const steps = { size: size.steps, density: dens.steps };
+  const alphas = { size: uniq(entries.size.map((e) => e.alpha)), density: uniq(entries.density.map((e) => e.alpha)) };
+  const Ns = [...entries.size, ...entries.density].map((e) => e.N).filter(isNum);
+  return {
+    data, entries, steps, alphas,
+    Nmin: Ns.length ? Math.min(...Ns) : 1000, Nmax: Ns.length ? Math.max(...Ns) : 1e6,
+    entriesFor: (route, alpha) => entries[route].filter((e) => e.alpha === alpha).sort((a, b) => a.N - b.N),
+  };
+}
+function matchedPairs(alpha) {
+  const A = model.entriesFor("size", alpha), B = model.entriesFor("density", alpha), pairs = [];
+  for (const a of A) {
+    let best = null, bd = Infinity;
+    for (const b of B) { const d = Math.abs(Math.log(b.N / a.N)); if (d < bd) { bd = d; best = b; } }
+    if (best && Math.exp(bd) <= MATCH_RATIO) pairs.push({ size: a, density: best });
+  }
+  return pairs;
+}
+
+/* ---------- state ---------- */
+const state = {
+  routes: new Set(["density", "size"]),       // boxes shown, at least one
+  rules: new Set(["densest"]),                // islands shown, at least one
+  alpha: 0.9,
+  matched: false,                             // only the N present in both boxes
+  commonAlpha: false,                         // only the α run in both boxes; presets leave it alone
+  view: "grid",                               // "charts" (one α) or "grid" (every α)
+};
+let model = null;
+/* a preset sets the boxes and islands; every control works as usual afterwards */
+const PRESETS = [
+  { id: "sep30", label: "Sep 30 plot", tip: "Old island, denser 90 × 90 box: the Sep 30 figure. The finer α now have four seeds instead of three.",
+    routes: ["density"], rules: ["old"], matched: false },
+  { id: "rule", label: "Island change", tip: "Same box, different islands: the denser 90 × 90 box with the old, new and densest islands laid over each other.",
+    routes: ["density"], rules: ["old", "busiest", "densest"], matched: false },
+  { id: "route", label: "Count change", tip: "Same island, different way of adding particles: both boxes with the old island.",
+    routes: ["density", "size"], rules: ["old"], matched: false },
+  { id: "both", label: "Both changes", tip: "Larger box, new island: both changes together.",
+    routes: ["size"], rules: ["busiest"], matched: false },
+];
+const sameSet = (set, arr) => set.size === arr.length && arr.every((x) => set.has(x));
+/* a preset shows as on while the boxes, islands and matched N match it */
+const presetOn = (p) => sameSet(state.routes, p.routes) && sameSet(state.rules, p.rules) && state.matched === p.matched;
+function applyPreset(id) { const p = PRESETS.find((x) => x.id === id); if (p) { state.routes = new Set(p.routes); state.rules = new Set(p.rules); state.matched = p.matched; renderAll(); } }
+/* one island: the boxes share a chart; one box: the islands do; both boxes and several islands: one panel per island */
+const activeRoutes = () => ROUTE_ORDER.filter((r) => state.routes.has(r));
+const activeRules = () => RULE_ORDER.filter((r) => state.rules.has(r));
+const bothRoutes = () => state.routes.size === 2;
+const splitView = () => bothRoutes() && state.rules.size > 1;
+/* every α of the boxes shown, so adding a box only adds curves; "common α" (or matched N, whose pairs need
+   both boxes) keeps the α run in both boxes */
+const commonAlphas = () => model.alphas.density.filter((a) => model.alphas.size.includes(a));
+const commonForced = () => bothRoutes() && state.matched;
+function alphasAvailable() {
+  if (state.commonAlpha || commonForced()) return commonAlphas();
+  const set = new Set(activeRoutes().flatMap((r) => model.alphas[r]));
+  return [...set].sort((a, b) => a - b);
+}
+const missingBoxNote = (alpha) => bothRoutes() && !model.alphas.size.includes(alpha) ? "denser box only" : null;
+let alphaNote = "";
+function ensureAlpha() {
+  const av = alphasAvailable(); alphaNote = "";
+  if (!av.length || av.includes(state.alpha)) return;
+  const from = state.alpha;
+  state.alpha = av.reduce((b, a) => Math.abs(a - from) < Math.abs(b - from) ? a : b, av[0]);
+  alphaNote = "α " + from + ": denser box only → " + state.alpha;
+}
+/* line pattern = island (old dashed, new solid, densest diamonds); line weight = box (denser thin with hollow
+   markers, larger thick with filled markers). Buttons, legends and curves all use it. */
+const RULE_SAMPLE = { old: { dash: "7 5", shape: "circle" }, busiest: { dash: null, shape: "circle" }, densest: { dash: null, shape: "diamond" } };
+const BOX_SAMPLE = { density: { width: 1.3, hollow: true }, size: { width: 2.8, hollow: false } };
+function styleFor(route, rule) {
+  return { cp: RULES[rule].cp, dash: RULE_SAMPLE[rule].dash, shape: RULE_SAMPLE[rule].shape, width: BOX_SAMPLE[route].width, hollow: BOX_SAMPLE[route].hollow };
+}
+const boxSample = (route) => glyph({ width: BOX_SAMPLE[route].width, hollow: BOX_SAMPLE[route].hollow, endMarker: true }, "currentColor");
+const islandSample = (rule) => { const cp = RULES[rule].cp; return glyph({ cp, markers: cp, connector: cp, dash: RULE_SAMPLE[rule].dash, shape: RULE_SAMPLE[rule].shape, width: 2 }, "currentColor"); };
+const timeStyle = (route, rule) => { const st = styleFor(route, rule); return Object.assign(st, { markers: st.cp, connector: st.cp }); };
+const lateStyle = (route, rule) => { const st = styleFor(route, rule); return Object.assign(st, { markers: true, dash: st.cp ? "2 4" : st.dash }); };
+function renderAll() { ensureAlpha(); refreshStops(); renderRail(); renderCharts(); }
+function renderCharts() {
+  const grid = state.view === "grid";
+  $("charts").hidden = grid; $("gridview").hidden = !grid;
+  if (grid) renderGrid(); else { renderTime(); renderLate(); }
+}
+
+/* ---------- controls ---------- */
+function segControl(host, options, current, onPick) {
+  host.replaceChildren(); host.classList.add("seg");
+  for (const o of options) {
+    const b = h("button", { type: "button", "aria-pressed": String(o.value === current), disabled: o.disabled || null, "data-tip": o.title || null }, o.glyph || null, o.kbd ? h("kbd", { text: o.kbd }) : null, o.label);
+    b.addEventListener("click", () => onPick(o.value));
+    host.append(b);
+  }
+}
+function chipControl(host, options, isOn, onToggle) {
+  host.replaceChildren(); host.className = "chips";
+  for (const o of options) {
+    const b = h("button", { type: "button", class: "chip", "aria-pressed": String(isOn(o.value)), "data-tip": o.title || null }, o.glyph || null, o.kbd ? h("kbd", { text: o.kbd }) : null, o.label);
+    b.addEventListener("click", () => onToggle(o.value));
+    host.append(b);
+  }
+}
+function toggleRoute(r) { if (state.routes.has(r)) { if (state.routes.size === 1) return; state.routes.delete(r); } else state.routes.add(r); }
+function toggleRule(r) { if (state.rules.has(r)) { if (state.rules.size === 1) return; state.rules.delete(r); } else state.rules.add(r); }
+function renderRail() {
+  chipControl($("presets"), PRESETS.map((p) => ({ value: p.id, label: p.label, title: p.tip })), (id) => presetOn(PRESETS.find((p) => p.id === id)), applyPreset);
+  // boxes
+  $("q-route").dataset.tip = "Line weight = box: denser 90×90 thin (hollow markers), larger box thick (filled markers).\n" + ROUTE_ORDER.map((r) => ROUTES[r].label + ": " + ROUTES[r].def).join("\n");
+  const routeOpts = ROUTE_ORDER.map((r) => ({ value: r, label: ROUTES[r].chip, title: ROUTES[r].label + ": " + ROUTES[r].def, glyph: boxSample(r) }));
+  chipControl($("route-picks"), routeOpts, (r) => state.routes.has(r), (r) => { toggleRoute(r); renderAll(); });
+  const opts = $("route-opts"); opts.replaceChildren();
+  {
+    const both = bothRoutes();
+    const cb = h("input", { type: "checkbox", id: "opt-matched", disabled: both ? null : true }); cb.checked = both && state.matched;
+    cb.addEventListener("change", () => { state.matched = cb.checked; renderAll(); });
+    opts.append(h("label", { class: "check" + (both ? "" : " off"), for: "opt-matched", "data-tip": "Only the N present in both boxes (within a factor 1.25): L 60 ↔ 1.2/site, L 90 ↔ 2.4 (shared runs), L 120 ↔ 4.8, L 180 ↔ 9.6 (same N), L 240 ↔ 14.4. Needs both boxes." }, cb, "matched N"));
+  }
+  // islands
+  $("q-rule").dataset.tip = "Which group of sites counts as the island (density = its particles ÷ its sites).\nLine pattern = island: old dashed, new solid, densest diamonds.";
+  const ruleOpts = RULE_ORDER.map((r, i) => ({ value: r, label: RULES[r].chip, kbd: String(i + 1), title: RULES[r].label + ": " + RULES[r].def + (RULES[r].caveat ? "\n" + RULES[r].caveat : ""), glyph: islandSample(r) }));
+  chipControl($("rule-picks"), ruleOpts, (r) => state.rules.has(r), (r) => { toggleRule(r); renderAll(); });
+  // α
+  const av = alphasAvailable();
+  segControl($("alpha-seg"), av.map((a) => ({ value: a, label: String(a) })), state.alpha, (a) => { state.alpha = a; renderAll(); });
+  const ao = $("alpha-opts"); ao.replaceChildren();
+  {
+    const forced = commonForced(), ca = commonAlphas();
+    const cb = h("input", { type: "checkbox", id: "opt-common", disabled: forced ? true : null }); cb.checked = forced || state.commonAlpha;
+    cb.addEventListener("change", () => { state.commonAlpha = cb.checked; renderAll(); });
+    ao.append(h("label", { class: "check" + (forced ? " off" : ""), for: "opt-common", "data-tip": "Only the " + ca.length + " α run in both boxes (" + ca.join(", ") + "): the same panels in every setting." + (forced ? "\nOn while matched N is on." : "") }, cb, "common α"));
+  }
+  $("alpha-hint").textContent = alphaNote;
+  segControl($("view-seg"), [{ value: "charts", label: "one α", title: "One α at a time: the time chart and the late-value chart (G switches)" }, { value: "grid", label: "all α", title: "Every α as small panels of the time chart (G switches)" }], state.view, (v) => { state.view = v; renderAll(); });
+  if (popEl && !popEl.isConnected) hidePop(true);   // its control was just redrawn
+}
+/* ---------- the N colour bar ---------- */
+function renderNScale(host, shownN) {
+  host.replaceChildren();
+  const W = 170, H = 30, bx = 4, bw = W - 8;
+  const svg = s("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "colour scale: particle count N from " + fmtN(model.Nmin) + " to " + fmtN(model.Nmax) });
+  const gid = "ngrad-" + host.id, defs = s("defs"), lg = s("linearGradient", { id: gid, x1: 0, x2: 1, y1: 0, y2: 0 });
+  nStops.forEach((c, i) => lg.append(s("stop", { offset: (i / 6 * 100) + "%", "stop-color": c }))); defs.append(lg); svg.append(defs);
+  svg.append(s("rect", { x: bx, y: 7, width: bw, height: 7, rx: 2, fill: "url(#" + gid + ")" }));
+  const xOf = (N) => bx + nT(N) * bw;
+  for (const N of uniq(shownN)) svg.append(s("line", { x1: xOf(N), x2: xOf(N), y1: 3, y2: 6, style: "stroke:var(--ink-2);stroke-width:1" }));
+  svg.append(s("text", { x: bx, y: 27, "text-anchor": "start", text: fmtN(model.Nmin) }), s("text", { x: bx + bw, y: 27, "text-anchor": "end", text: fmtN(model.Nmax) }));
+  for (const d of [1e4, 1e5]) if (d > model.Nmin && d < model.Nmax) { const x = xOf(d); svg.append(s("line", { x1: x, x2: x, y1: 14, y2: 17, style: "stroke:var(--axis)" }), s("text", { x, y: 27, "text-anchor": "middle", text: fmtTick(d) })); }
+  host.append(h("b", { text: "N" }), svg);
+}
+
+/* ---------- island density over time ---------- */
+function timeSeriesFor(alpha, rules = activeRules()) {
+  const routes = activeRoutes(), two = bothRoutes();
+  const pairs = two && state.matched ? matchedPairs(alpha) : null;
+  const anchor = rules.includes("busiest") ? "busiest" : (rules.find((r) => !RULES[r].cp) || rules[0]);   // the curves that carry N labels
+  const series = [], shownN = [];
+  for (const route of DRAW_ORDER) {
+    if (!routes.includes(route)) continue;
+    let entries = model.entriesFor(route, alpha);
+    if (pairs) entries = entries.filter((e) => pairs.some((p) => p[route] === e));
+    const steps = model.steps[route];
+    for (const rule of rules) {
+      const st = timeStyle(route, rule), key = RULES[rule].key;
+      for (const e of entries) {
+        const color = nColor(e.N);
+        shownN.push(e.N);
+        const who = (two ? ROUTES[route].short + ", " : RULES[rule].short + " · ") + e.desc + " · N " + fmtN(e.N);
+        let points;
+        if (st.cp) { const cp = e.checkpoints || { steps: [] }; points = cp.steps.map((t, i) => [t, t <= CUT && cp[key] ? cp[key][i] : null]); }
+        else points = steps.map((t, i) => [t, t <= CUT && e.curves[key] ? e.curves[key][i] : null]);
+        series.push({ color, points, width: st.width, dash: st.dash, markers: st.cp, connector: st.cp, shape: st.shape, hollow: st.hollow, style: st, endLabel: rule === anchor ? fmtN(e.N) : null, tipLabel: who, route, rule, e });
+      }
+    }
+  }
+  return { series, shownN };
+}
+/* one y range for every chart and setting: it holds every density drawn (1.6 to 2,409) and every seed range (to 3,940) */
+const Y_RANGE = [1.5, 4000];
+function styleLegend(host, forLate) {
+  host.replaceChildren();
+  const rules = activeRules(), routes = activeRoutes(), mk = forLate ? lateStyle : timeStyle;
+  if (bothRoutes()) for (const r of routes) host.append(h("span", { class: "item", "data-tip": ROUTES[r].def }, rules.length > 1 ? boxSample(r) : glyph(mk(r, rules[0]), "var(--ink-2)"), ROUTES[r].chip));
+  else for (const r of rules) host.append(h("span", { class: "item", "data-tip": RULES[r].def + (RULES[r].cp ? " Markers: saved lattices only." : "") }, glyph(mk(routes[0], r), "var(--ink-2)"), RULES[r].chip));
+}
+/* what the legend does not say: the box or island held fixed, and matched N */
+function timeCaption() {
+  const routes = activeRoutes(), rules = activeRules(), parts = [];
+  if (bothRoutes() && rules.length === 1) parts.push("island: " + RULES[rules[0]].chip);
+  else if (!bothRoutes()) parts.push("route: " + ROUTES[routes[0]].chip);
+  if (state.matched && bothRoutes()) parts.push("matched N");
+  return parts.join(" · ");
+}
+function renderTime() {
+  const rules = activeRules(), split = splitView();
+  $("time-title").textContent = "Island density · α " + state.alpha;
+  styleLegend($("time-legend"), false);
+  const host = $("time-chart"); host.replaceChildren(); host.classList.toggle("split", split);
+  const panels = split ? rules.map((r) => Object.assign({ rule: r }, timeSeriesFor(state.alpha, [r]))) : [Object.assign({ rule: null }, timeSeriesFor(state.alpha, rules))];
+  renderNScale($("time-nscale"), panels.flatMap((p) => p.shownN));
+  const lastStep = Math.max(0, ...panels.flatMap((p) => p.series.flatMap((sr) => sr.points.filter(([x, y]) => isNum(y) && x > 0).map(([x]) => x))));
+  for (const p of panels) { p.host = split ? h("div", { class: "chart" }) : host; if (split) host.append(p.host); }
+  for (const p of panels) drawLineChart(p.host, {
+    title: split ? RULES[p.rule].chip : null,
+    x: { type: "log", label: "step", domain: lastStep ? [25, lastStep] : null }, y: { type: "log", label: "island density", domain: Y_RANGE },
+    series: p.series, hover: "x", tipTitle: (x) => "step " + x.toLocaleString("en-US"),
+    aria: "island density over time at alpha " + state.alpha + (p.rule ? ", " + RULES[p.rule].label : ""), emptyText: "No runs at α = " + state.alpha + " for this choice.",
+  });
+  const cap = $("time-caption"); cap.textContent = [timeCaption(), missingBoxNote(state.alpha)].filter(Boolean).join(" · "); cap.dataset.tip = cap.textContent;
+}
+
+/* ---------- grid: one panel per α ---------- */
+function renderGrid() {
+  const av = alphasAvailable(), cells = $("grid-cells"), rules = activeRules(), split = splitView();
+  cells.replaceChildren();
+  $("grid-title").textContent = "Island density · every α";
+  styleLegend($("grid-legend"), false);
+  const panels = split ? rules.flatMap((r) => av.map((a) => Object.assign({ alpha: a, rule: r }, timeSeriesFor(a, [r])))) : av.map((a) => Object.assign({ alpha: a, rule: null }, timeSeriesFor(a, rules)));
+  renderNScale($("grid-nscale"), panels.flatMap((p) => p.shownN));
+  const lastStep = Math.max(0, ...panels.flatMap((p) => p.series.flatMap((sr) => sr.points.filter(([x, y]) => isNum(y) && x > 0).map(([x]) => x))));
+  // place every panel first, so each is measured at its final size, then draw
+  let lastRule = null;
+  for (const p of panels) {
+    if (split && p.rule !== lastRule) { cells.append(h("div", { class: "gsec", text: RULES[p.rule].chip })); lastRule = p.rule; }
+    p.host = h("div", { class: "chart" });
+    const mini = h("div", { class: "mini", "aria-label": "alpha " + p.alpha + (p.rule ? " " + RULES[p.rule].label : "") }, p.host);
+    mini.addEventListener("dblclick", () => { state.alpha = p.alpha; state.view = "charts"; renderAll(); });
+    cells.append(mini);
+  }
+  for (const p of panels) drawLineChart(p.host, {
+    compact: true, title: "α " + p.alpha + (p.rule ? " · " + RULES[p.rule].chip : ""), titleNote: missingBoxNote(p.alpha),
+    x: { type: "log", label: "step", domain: lastStep ? [25, lastStep] : null }, y: { type: "log", label: "island density", domain: Y_RANGE },
+    series: p.series, hover: "x", tipTitle: (x) => "α " + p.alpha + " · step " + x.toLocaleString("en-US"),
+    aria: "island density over time at alpha " + p.alpha, emptyText: "no runs",
+  });
+  const cap = $("grid-caption"); cap.textContent = [timeCaption(), "double-click a panel to open it"].filter(Boolean).join(" · "); cap.dataset.tip = cap.textContent;
+}
+
+/* ---------- late island density against N ---------- */
+/* the larger-box runs go on past step 20,000; their late values are read at 20,000, like the denser box's */
+function lateOf(e, route, rule) {
+  const key = RULES[rule].key, cut = route === "size";
+  if (RULES[rule].cp) {
+    const cp = cut ? e.checkpoints20000 : e.checkpoints;
+    const a = cp && cp.late && cp.late[key];
+    if (!a || !isNum(a[0])) return null;
+    return { v: a[0], lo: a[1], hi: a[2], seeds: cp.seeds, cp: true, win: "lattice" + (cp.lateSteps.length > 1 ? "s at " : " at ") + cp.lateSteps.map(fmtStep).join(" + ") };
+  }
+  const lt = cut ? e.late20000 : e.late;
+  const a = lt && lt[key];
+  if (!a || !isNum(a[0])) return null;
+  return { v: a[0], lo: a[1], hi: a[2], seeds: lt.seeds, cp: false, win: fmtStep(0.75 * lt.T) + "–" + fmtStep(lt.T) };
+}
+function lateSeriesFor(rules) {
+  const routes = activeRoutes(), two = bothRoutes();
+  const pairs = two && state.matched ? matchedPairs(state.alpha) : null;
+  const series = [], ranges = [], rows = [], shownN = [];
+  for (const route of DRAW_ORDER) {
+    if (!routes.includes(route)) continue;
+    let entries = model.entriesFor(route, state.alpha);
+    if (pairs) entries = entries.filter((e) => pairs.some((p) => p[route] === e));
+    for (const rule of rules) {
+      const st = lateStyle(route, rule);
+      const pts = entries.map((e) => ({ e, val: lateOf(e, route, rule) })).filter((p) => p.val);
+      if (!pts.length) continue;
+      for (const p of pts) { shownN.push(p.e.N); rows.push({ route, rule, ...p }); ranges.push({ x: p.e.N, lo: p.val.lo, hi: p.val.hi, color: nColor(p.e.N) }); }
+      const who = two ? ROUTES[route].label : RULES[rule].label;
+      series.push({ color: "var(--ink-2)", opacity: 0.75, width: st.width, dash: st.dash, points: pts.map((p) => [p.e.N, p.val.v]), markers: true, line: true, shape: st.shape, hollow: st.hollow,
+        markerColor: (i) => nColor(pts[i].e.N), style: st, tipLabel: who,
+        tipRows: (i) => { const { e, val } = pts[i]; return { title: who + " · " + e.descLong + " · N " + e.N.toLocaleString("en-US"), rows: [
+          { color: nColor(e.N), style: st, value: fmt(val.v), label: RULES[rule].short + ", density" },
+          { value: fmt(val.lo) + " – " + fmt(val.hi), label: "range over " + val.seeds + " seed" + (val.seeds > 1 ? "s" : "") },
+          { value: val.win, label: val.cp ? "saved lattice" : "mean over steps" }] }; } });
+    }
+  }
+  return { series, ranges, rows, shownN };
+}
+function renderLate() {
+  const rules = activeRules(), split = splitView();
+  $("late-title").textContent = "Late island density vs N · α " + state.alpha;
+  const host = $("late-chart"), numbers = $("late-numbers");
+  host.replaceChildren(); numbers.replaceChildren(); host.classList.toggle("split", split);
+  const panels = split ? rules.map((r) => Object.assign({ rule: r }, lateSeriesFor([r]))) : [Object.assign({ rule: null }, lateSeriesFor(rules))];
+  styleLegend($("late-legend"), true);
+  renderNScale($("late-nscale"), panels.flatMap((p) => p.shownN));
+  for (const p of panels) { p.host = split ? h("div", { class: "chart" }) : host; if (split) host.append(p.host); }
+  for (const p of panels) drawLineChart(p.host, {
+    title: split ? RULES[p.rule].chip : null,
+    x: { type: "log", label: "N" }, y: { type: "log", label: "late island density", domain: Y_RANGE },
+    series: p.series, ranges: p.ranges, hover: "point",
+    aria: "late island density against N at alpha " + state.alpha + (p.rule ? ", " + RULES[p.rule].label : ""), emptyText: "No late values at α = " + state.alpha + " for this choice.",
+  });
+  const cap = $("late-caption");
+  cap.textContent = missingBoxNote(state.alpha) || "";
+  cap.dataset.tip = cap.textContent;
+  // the same values as a table, in the bottom fold
+  const rows = panels.flatMap((p) => p.rows);
+  const tbl = h("table", { class: "data" }, h("thead", {}, h("tr", {}, h("th", { text: "route" }), h("th", { class: "l", text: "box / density" }), h("th", { text: "N" }), h("th", { class: "l", text: "island" }), h("th", { text: "density" }), h("th", { text: "seed min" }), h("th", { text: "seed max" }), h("th", { text: "seeds" }), h("th", { class: "l", text: "window" }))));
+  const tb = h("tbody");
+  rows.sort((a, b) => a.e.N - b.e.N || ROUTE_ORDER.indexOf(a.route) - ROUTE_ORDER.indexOf(b.route) || RULE_ORDER.indexOf(a.rule) - RULE_ORDER.indexOf(b.rule));
+  for (const r of rows) tb.append(h("tr", {}, h("td", { text: ROUTES[r.route].short }), h("td", { class: "l", text: r.e.desc }), h("td", { text: r.e.N.toLocaleString("en-US") }), h("td", { class: "l", text: RULES[r.rule].short }), h("td", { class: "strong", text: fmt(r.val.v) }), h("td", { text: fmt(r.val.lo) }), h("td", { text: fmt(r.val.hi) }), h("td", { text: r.val.seeds }), h("td", { class: "l dim", text: r.val.win })));
+  tbl.append(tb); numbers.append(h("div", { class: "hint", text: "α = " + state.alpha + " · the late values drawn above" }), tbl);
+}
+
+/* ---------- bottom folds: definitions and notes ---------- */
+function renderDefs() {
+  const dl = $("defs-body"); dl.replaceChildren();
+  const add = (t, d) => dl.append(h("dt", { text: t }), h("dd", { text: d }));
+  for (const r of RULE_ORDER) add("island: " + RULES[r].label, RULES[r].def + (RULES[r].caveat ? " " + RULES[r].caveat : ""));
+  add("Saved lattices", "steps " + CP_STEPS + "; the densest island is known only there.");
+  add(ROUTES.density.label, ROUTES.density.def);
+  add(ROUTES.size.label, ROUTES.size.def + " L 90 at 2.4 per site is the 90 × 90 box at that density: both boxes share these runs, and the larger box has a fifth seed at α 0.85, 0.88, 0.92, 0.94 and 0.96.");
+  add("Matched N", "pairs within a factor " + MATCH_RATIO + ": L 60 ↔ 1.2/site, L 90 ↔ 2.4 (shared runs), L 120 ↔ 4.8, L 180 ↔ 9.6 (same N), L 240 ↔ 14.4.");
+  add("Late value", "mean over the last quarter of the run, steps 15,100 to 20,000, in both boxes; densest: the saved lattice at step 20,000. Bars: smallest and largest seed value.");
+  add("Curves", "seed means at about 100 log-spaced steps (the runs sample every 25 steps to 5,000, then every 100). Step 0 is off the log axis. Colour = N, the total particle count, on one log scale for both boxes.");
+  const st = (model.data.settings) || {};
+  add("Settings", Object.entries(st).map(([k, v]) => k + ": " + v).join(" · ") + (model.data.generated ? " · data " + model.data.generated.replace("T", " ") : ""));
+}
+function renderFindings() {
+  const slot = $("findings-slot"); let items = [];
+  try { items = JSON.parse($("findings").textContent || "[]"); } catch (e) { items = []; }
+  slot.replaceChildren();
+  if (!Array.isArray(items) || !items.length) return;
+  slot.append(h("ul", {}, items.map((it) => h("li", {}, it.title ? h("b", { text: it.title + " " }) : null, it.text || ""))));
+}
+
+/* ---------- explanations (data-tip) ----------
+   Shown after hovering for TIP_DELAY or at once on keyboard focus; a click on a "?" pins it until a click elsewhere
+   or Esc. It sits below its element, or above when there is no room. */
+const pop = $("pop");
+let popEl = null, popPinned = false, popTimer = 0;
+const TIP_DELAY = 1000;   // ms of hovering before a tooltip shows
+function placePop(el) {
+  const r = el.getBoundingClientRect(), pad = 6;
+  pop.style.left = "0px"; pop.style.top = "0px";
+  const w = pop.offsetWidth, hh = pop.offsetHeight;
+  const x = Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2));
+  let y = r.bottom + pad;
+  if (y + hh > window.innerHeight - 4) y = r.top - hh - pad;
+  if (y < 4) y = Math.max(4, Math.min(window.innerHeight - hh - 4, r.bottom + pad));
+  pop.style.left = x + "px"; pop.style.top = y + "px";
+}
+function showPop(el) {
+  const text = el.dataset.tip; if (!text) return;
+  popEl = el; pop.textContent = text; pop.hidden = false; placePop(el);
+}
+function hidePop(force) {
+  if (popPinned && !force) return;
+  clearTimeout(popTimer); popTimer = 0; popPinned = false; popEl = null; pop.hidden = true; pop.classList.remove("pinned");
+  document.querySelectorAll(".q.on").forEach((q) => q.classList.remove("on"));
+}
+const tipTarget = (ev) => ev.target && ev.target.closest ? ev.target.closest("[data-tip]") : null;
+document.addEventListener("pointerover", (ev) => {
+  const el = tipTarget(ev); if (!el || popPinned) return;
+  clearTimeout(popTimer); popTimer = setTimeout(() => showPop(el), TIP_DELAY);
+});
+document.addEventListener("pointerout", (ev) => {
+  const el = tipTarget(ev); if (!el || popPinned) return;
+  if (ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+  clearTimeout(popTimer); popTimer = 0;
+  if (popEl === el) hidePop();
+});
+// keyboard focus shows the tooltip at once; a mouse click (which also focuses) does not
+document.addEventListener("focusin", (ev) => { const el = tipTarget(ev); if (el && !popPinned && el.matches(":focus-visible")) showPop(el); });
+document.addEventListener("focusout", (ev) => { const el = tipTarget(ev); if (el && !popPinned && popEl === el) hidePop(); });
+document.addEventListener("click", (ev) => {
+  const q = ev.target.closest ? ev.target.closest(".q") : null;
+  if (q) {
+    ev.preventDefault();
+    if (popPinned && popEl === q) { hidePop(true); return; }
+    hidePop(true); showPop(q); popPinned = true; pop.classList.add("pinned"); q.classList.add("on"); return;
+  }
+  if (popPinned && !pop.contains(ev.target)) hidePop(true);
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { hidePop(true); return; }
+  if ((ev.key === "Enter" || ev.key === " ") && ev.target.classList && ev.target.classList.contains("q")) { ev.preventDefault(); ev.target.click(); }
+});
+window.addEventListener("scroll", () => { if (popEl) placePop(popEl); }, true);
+window.addEventListener("resize", () => { if (popEl) hidePop(true); });
+
+/* ---------- keyboard ---------- */
+function onKey(ev) {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const k = ev.key;
+  if (k === "ArrowLeft" || k === "ArrowRight") {
+    const av = alphasAvailable(); const i = av.indexOf(state.alpha); if (i < 0) return;
+    const j = Math.max(0, Math.min(av.length - 1, i + (k === "ArrowRight" ? 1 : -1)));
+    if (j !== i) { state.alpha = av[j]; renderAll(); } ev.preventDefault();
+  } else if (k >= "1" && k <= "3") { toggleRule(RULE_ORDER[+k - 1]); renderAll(); }
+  else if (k === "r" || k === "R") {   // both → denser → larger → both
+    if (bothRoutes()) state.routes = new Set(["density"]); else if (state.routes.has("density")) state.routes = new Set(["size"]); else state.routes = new Set(["density", "size"]);
+    renderAll();
+  }
+  else if (k === "g" || k === "G") { state.view = state.view === "grid" ? "charts" : "grid"; renderAll(); }
+}
+
+/* ---------- boot ---------- */
+function boot() {
+  renderFindings();
+  let data = null;
+  try { data = JSON.parse($("page-data").textContent); }
+  catch (err) { const b = $("load-error"); b.className = "banner"; b.textContent = "This page has no data: build it with build/make_page.py."; b.hidden = false; data = { size: { steps: [], entries: [] }, density: { steps: [], entries: [] } }; }
+  model = buildModel(data);
+  if (!model.alphas.size.includes(0.9) && model.alphas.size.length) state.alpha = model.alphas.size[0];
+  document.addEventListener("keydown", onKey);
+  renderAll(); renderDefs();
+  let raf = 0, lastW = window.innerWidth, lastH = window.innerHeight;
+  window.addEventListener("resize", () => { if (window.innerWidth === lastW && window.innerHeight === lastH) return; lastW = window.innerWidth; lastH = window.innerHeight; cancelAnimationFrame(raf); raf = requestAnimationFrame(renderCharts); });
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (mq.addEventListener) mq.addEventListener("change", () => renderAll());
+  new MutationObserver(() => renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+}
+boot();
+})();
+</script>
+</body>
+</html>

@@ -3,15 +3,34 @@
 A hexagonal lattice-gas cellular automaton with a C++ simulation and a browser
 Lab for studying alignment and clustering.
 
-## Open the Lab
+## Open the Lab and the island study
 
 - **[Open LGCA Lab](https://nacapule.github.io/LGCA/lgca-viz/lgca-lab.html)**
 - **[Lab HTML file](lgca-viz/lgca-lab.html)** — download this file and open it
   in a browser to work offline. Nothing to install.
+- **[Open the island study](https://nacapule.github.io/LGCA/results/islands-2026-10-06/island-study.html)**
+  (Oct 7, 2026) — island density over time for each particle count, with two
+  ways of adding particles and three ways of choosing the island.
+  [HTML file](results/islands-2026-10-06/island-study.html) to open offline.
 
 The Lab supports fermion and boson models, adjustable density and alignment,
 replay, site inspection, density views and measurement exports. Settings
 can be saved and shared.
+
+## Island study
+
+This study changes two things in the density and alpha study below. The
+island is a whole group of connected occupied sites, with no density
+cutoff. And
+the particle count N grows in two ways: a denser 90 × 90 box, as before,
+or a larger box at a fixed density. The page lays the old and new versions
+of the same plot over each other.
+
+| Data | Contents |
+|---|---|
+| [Island density over time](results/islands-2026-10-06/island-density-vs-time.csv) | Seed means for each box, alpha and N: `old` is the cluster of the earlier study, `new` the island of the busiest site |
+| [Late island density](results/islands-2026-10-06/late-island-density.csv) | Late means for three choices of island, with seed ranges |
+| [Islands of the saved lattices](results/islands-2026-10-06/islands-at-saved-steps.csv) | Particles and sites of the busiest site's island, the heaviest island and the densest island in each saved lattice |
 
 ## Density and alpha study
 
@@ -39,7 +58,7 @@ The figures cover runs through 20,000 steps, averaged across several seeds.
 
 | Document | Contents |
 |---|---|
-| [Model and observables](docs/PHYSICS.md) | Collision rules, field settings, alpha and measurement definitions |
+| [Model and observables](docs/PHYSICS.md) | Collision rules, field settings, alpha, measurement and island definitions |
 | [Lab C++ source](native/README.md) | Simulation source and instructions for rebuilding after code changes |
 | [Reference C++](lgca/lgca_clean-1.cpp) | The original model implementation |
 | [Earlier C++ variant](lgca/lgca_noib.cpp) | Neighbour fields, polar bosons and normalization |
@@ -53,5 +72,9 @@ mediciones. La simulación corre en C++.
 
 El estudio compara la densidad de los cúmulos para distintas densidades
 iniciales y valores de alpha, y la ocupación máxima de un canal al aumentar
-el tamaño de la caja. Las tablas de arriba enlazan las figuras, los datos
-y las definiciones del modelo.
+el tamaño de la caja. El estudio de islas (7 de octubre de 2026) cambia dos
+cosas: la isla es un conjunto conectado de sitios ocupados, sin umbral de
+densidad, y el número de partículas también crece con una caja más grande a
+densidad fija, no solo con una caja de 90 × 90 más densa. Su página permite comparar las versiones de cada gráfica.
+Las tablas de arriba enlazan las figuras, los datos y las definiciones del
+modelo.

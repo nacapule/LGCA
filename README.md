@@ -6,12 +6,9 @@ Lab for studying alignment and clustering.
 ## Open the Lab and the island study
 
 - **[Open LGCA Lab](https://nacapule.github.io/LGCA/lgca-viz/lgca-lab.html)**
-- **[Lab HTML file](lgca-viz/lgca-lab.html)** — download this file and open it
-  in a browser to work offline. Nothing to install.
 - **[Open the island study](https://nacapule.github.io/LGCA/results/islands-2026-10-06/island-study.html)**
   (Oct 7, 2026) — island density over time for each particle count, with two
   ways of adding particles and three ways of choosing the island.
-  [HTML file](results/islands-2026-10-06/island-study.html) to open offline.
 
 The Lab supports fermion and boson models, adjustable density and alignment,
 replay, site inspection, density views and measurement exports. Settings

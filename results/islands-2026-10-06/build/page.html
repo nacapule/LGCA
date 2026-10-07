@@ -595,11 +595,11 @@ function matchedPairs(alpha) {
 
 /* ---------- state ---------- */
 const state = {
-  routes: new Set(["density", "size"]),       // boxes shown, at least one
-  rules: new Set(["densest"]),                // islands shown, at least one
+  routes: new Set(["size"]),                  // boxes shown, at least one; at load the "Both changes" preset
+  rules: new Set(["busiest"]),                // islands shown, at least one
   alpha: 0.9,
   matched: false,                             // only the N present in both boxes
-  commonAlpha: false,                         // only the α run in both boxes; presets leave it alone
+  commonAlpha: true,                          // only the α run in both boxes; on at load; presets leave it alone
   view: "grid",                               // "charts" (one α) or "grid" (every α)
 };
 let model = null;

@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 #include <utility>
 
@@ -100,7 +101,6 @@ Lgca::Lgca(const Params& params)
 // `kernel == "power" && alpha !== 0`, at every collision; kernel and alpha change only
 // through the constructor and set_options(), so the outcome is decided there, once.
 void Lgca::decide_collision() {
-    std::fill(pow_table_.begin(), pow_table_.end(), -1.0);   // alpha may have changed
     if (kernel_ == Kernel::Avg || (kernel_ == Kernel::Power && alpha_ == 1.0))
         norm_ = Norm::ByCount;
     else if (kernel_ == Kernel::Power && alpha_ != 0.0)
@@ -114,7 +114,7 @@ void Lgca::decide_collision() {
 // pow(m, alpha_) for a particle count m. For an integer m from 1 to POW_TABLE_SIZE - 1
 // the value is computed once with std::pow and kept: std::pow is deterministic, so the
 // kept value is the one every later call would return. Other m (not an integer, below 1,
-// too large) call std::pow directly. The table is reset whenever alpha_ may change.
+// too large) call std::pow directly. set_options() resets the table when alpha_ changes.
 double Lgca::pow_alpha(double m) const {
     if (m >= 1.0 && m < static_cast<double>(POW_TABLE_SIZE)) {
         const std::size_t q = static_cast<std::size_t>(m);
@@ -130,6 +130,12 @@ double Lgca::pow_alpha(double m) const {
 void Lgca::set_options(Kernel kernel, double alpha, BosonField field, BosonAlign align) {
     if (!(alpha >= 0.0 && alpha <= 2.0))   // also refuses NaN, as params_error() does
         throw std::invalid_argument("alpha must be a number from 0 to 2");
+    // The kept powers are pow(M, alpha_): they are forgotten only when alpha itself
+    // changes, compared bit for bit (so +0 and -0 count as different, harmlessly). The
+    // Lab sets its options again before every step request, usually to the values they
+    // already have, and keeping the table spares refilling it each time.
+    if (std::memcmp(&alpha, &alpha_, sizeof alpha) != 0)
+        std::fill(pow_table_.begin(), pow_table_.end(), -1.0);
     kernel_ = kernel;
     alpha_ = alpha;
     boson_field_ = field;
@@ -283,7 +289,7 @@ double Lgca::align_energy(unsigned conf, const double h[NODES], double sens) con
 }
 
 // The same for an occupancy given as six values (nonzero = occupied), the reference's
-// form; native/verify-native.mjs compares it with the reference's align_energy().
+// form, for comparison with the reference's align_energy().
 double Lgca::align_energy(const int conf[NODES], const double h[NODES], double sens) const {
     unsigned mask = 0;
     for (int k = 0; k < NODES; ++k)

@@ -21,7 +21,8 @@
 //   3. a replay round trip as the worker does it: restore a saved state, step on; the
 //      research options (every kernel, boson field and alignment, also changed between
 //      steps), step for step against the JavaScript engine; boson sampling at draws forced
-//      onto the boundaries of the channel distribution, on both engines; and the density
+//      onto the boundaries of the channel distribution, on both engines; a malformed
+//      generator state refused by both engines, which stay as they were; and the density
 //      diagnostics of the worker against numbers worked out by hand;
 //   4. the worker protocol: a worker running each engine receives a session of requests
 //      (steps, option changes, rewinds, looks at buffered ticks) and every reply must be
@@ -291,8 +292,8 @@ function runScenario(engine, o, label) {
 
 // The empty lattice (density 0), which the reference runs: its polar, nematic and band
 // divide by N = 0 and print NaN, and so do their errors; spatial order is 1 with error 0,
-// 1/occupied and its error are 0 (docs/PHYSICS.md, "The printed output and empty
-// lattices"). Lattice and generator are compared as for the other scenarios.
+// 1/occupied and its error are 0. Lattice and generator are compared as for the other
+// scenarios.
 const emptyScenarios = [
   {model:"boson",   tsteps:3, iters:2, sens:2,   dens:0, seed:12345},
   {model:"fermion", tsteps:3, iters:2, sens:0.8, dens:0, seed:12345},
@@ -491,6 +492,46 @@ function verifyCdfBoundaries(engine) {
         checks++;
       }
   return checks;
+}
+
+// The generator state contract (rng.setState, both engines): exactly 33 integers from 0 to 2^32 - 1, the
+// last (the index) below 32. Anything else throws a RangeError and leaves the generator as
+// it was; a valid state, typed or plain array, is taken word for word.
+function badRngStates(good) {
+  const edit = (q, v) => Array.from(good, (x, i) => i === q ? v : x);
+  const hole = Array.from(good); delete hole[3];
+  // every word different from the current state, so a setter that writes before it has
+  // checked everything shows (the index stays valid until the last word)
+  const other = Uint32Array.from(good, (x, i) => i < 32 ? ~x >>> 0 : (x + 7) % 32);
+  const late = (q, v) => Array.from(other, (x, i) => i === q ? v : x);
+  return [["32 words", good.slice(0, 32)], ["34 words", Uint32Array.from([...good, 0])],
+    ["index 32", edit(32, 32)], ["index -1", edit(32, -1)], ["a word of 2^32", edit(3, 2 ** 32)],
+    ["a negative word", edit(3, -1)], ["a fractional word", edit(3, 1.5)], ["a NaN word", edit(3, NaN)],
+    ["a missing word", edit(3, undefined)], ["a hole", hole], ["null", null], ["no words", []],
+    ["new words, then index 32", late(32, 32)], ["new words, then a NaN index", late(32, NaN)],
+    ["new words, the last 2^32", late(31, 2 ** 32)], ["32 new words", other.slice(0, 32)],
+    ["34 words, new ones", Uint32Array.from([...other, 0])]];
+}
+function verifyRngStateContract(make, engine) {
+  const options = {model:"boson", W:12, H:10, dens:0.4, seed:4242, kernel:"sum", bosonField:"site", bosonAlign:"nematic"};
+  const sim = make(options), twin = new LGCA(options);
+  try {
+    for (let t = 0; t < 3; t++) { sim.step(2); twin.step(2); }
+    const good = sim.rng.getState();
+    const cases = badRngStates(good);
+    for (const [what, bad] of cases) {
+      assert.throws(() => sim.rng.setState(bad), RangeError, `${engine}: rng.setState accepted ${what}`);
+      assert.deepEqual(Array.from(sim.rng.getState()), Array.from(good), `${engine}: a refused state (${what}) changed the generator`);
+    }
+    sim.rng.setState(Array.from(good));
+    for (let t = 0; t < 2; t++) { sim.step(2); twin.step(2); }
+    assert.deepEqual(Array.from(sim.rng.getState()), Array.from(twin.rng.getState()), `${engine}: the generator moved after the refusals`);
+    assert.deepEqual(Array.from(sim.occ), Array.from(twin.occ), `${engine}: the lattice moved after the refusals`);
+    const odd = Uint32Array.from(good, (x, i) => i === 0 ? 0 : i === 1 ? 0xffffffff : i === 32 ? 31 : x);
+    sim.rng.setState(odd);
+    assert.deepEqual(Array.from(sim.rng.getState()), Array.from(odd), `${engine}: a valid state was not taken word for word`);
+    return cases.length;
+  } finally { if (sim.destroy) sim.destroy(); }
 }
 
 // ------------------------------------------------------------------------------------
@@ -1193,6 +1234,7 @@ function openLab(glue, {search = "", storage = {}, refuse = false, before = null
                frameFn:null, storage:new FakeStorage(storage, refuse), theme:CSS_VARS, themeListeners:[]};
   const window = {devicePixelRatio:dpr, addEventListener() {}, matchMedia:() => ({addEventListener:(type, fn) => out.themeListeners.push(fn)})};
   const navigator = {clipboard:{writeText:async text => { out.clipboard.push(text); }}};
+  out.navigator = navigator;
   const quiet = {log() {}, info() {}, warn:m => out.warnings.push(String(m)), error:m => out.warnings.push(String(m))};
   let script = PAGE_SCRIPT;
   if (mutate) {
@@ -1578,6 +1620,40 @@ async function verifyPage(glue) {
        assert(stroke, "the inspector kept the old theme's colour");
      },
      ["addEventListener(\"change\",()=>{ drawChart(); hoverKey=\"\"; });", "addEventListener(\"change\",()=>{ drawChart(); });"]],
+    ["the inspector redraws when the particle colours or the view change under a resting pointer", {},
+     async page => {
+       await page.settle(() => page.lab.sim.engine !== "", "the init reply");
+       page.$("bPlay").click();
+       await page.settle(() => page.idle(), "a quiet page");
+       page.lab.sim.occ.set([9, 0, 0, 0, 0, 0], 0);                  // site (0, 0): channel 0 only
+       page.$("simCanvas").dispatch("mousemove", {clientX:0.5 * 5.5, clientY:0.5 * 5.5 * Math.sqrt(3) / 2});
+       const rc = page.rose.getContext("2d");
+       const after = (seg, v) => {                                   // a control changes; the pointer rests
+         rc.calls = []; page.$(seg).querySelector(`[data-v="${v}"]`).click(); page.tick();
+         const strokes = rc.calls.filter(c => c[0] === "=strokeStyle").map(c => c[1]); rc.calls = null;
+         return strokes;
+       };
+       assert(after("segPCol", "uni").includes(CSS_VARS["--accent"]), "uniform colour: the rose kept the channel colours");
+       assert(after("segPCol", "dir").includes("#e5484d"), "direction colour: the rose kept the uniform colour");
+       assert(after("segMode", "density").includes(CSS_VARS["--accent"]), "density view: the rose kept the channel colours");
+     },
+     ['+"|"+P.pcol+"|"+P.mode; }', '; }']],
+    ["the CSV file is named by the run it holds when the clipboard refuses after a reset", {},
+     async page => {
+       await page.settle(() => page.lab.sim.engine !== "" && page.lab.sim.frameT >= 1, "the first frame");
+       const {lab} = page, t = lab.sim.t;
+       let refuse = null;
+       page.navigator.clipboard.writeText = () => new Promise((resolve, reject) => { refuse = reject; });
+       page.$("bCsv").click();
+       page.$("inSize").value = "60"; page.$("inSeed").value = "777"; lab.reset();
+       await page.settle(() => lab.sim.W === 60 && lab.sim.engine !== "", "the 60 x 60 run");
+       refuse(new Error("refused on purpose"));
+       await sleep(5);
+       const csv = page.created.find(e => e.localName === "a" && String(e.download).endsWith(".csv"));
+       assert(csv, "no CSV file was saved");
+       assert.equal(csv.download, `lgca-boson-120x120-d0.4-seed12345-t${t}.csv`);
+     },
+     ["    a.download=name;", "    a.download=`lgca-${sim.model}-${sim.W}x${sim.H}-d${sim.dens}-seed${sim.seed}-t${sim.t}.csv`;"]],
     ["guides follow the periodic copies across the edge", {},
      async page => {
        await page.settle(() => page.lab.sim.engine !== "", "the init reply");
@@ -1814,9 +1890,10 @@ async function verifyPage(glue) {
   results.push(`PASS the page: ${small.length} checks of controls and displays (speed label, typed sensitivity and α, ` +
     "band when off, boson density limit, card preferences, recipe storage and import, presets, the site inspector, " +
     "wrapped counts and guides, overlay centres, chart sharpness and redraws, field-view rebuilds, the history-limit label, an " +
-    "engine failure on the main thread, study links, other-fields defaults, snapshot names); each fix's absence fails its check");
+    "engine failure on the main thread, study links, other-fields defaults, snapshot names, the inspector after colour and view " +
+    "changes, the CSV file name after a late clipboard refusal); each fix's absence fails its check");
 
-  // (e) The study link's defaults, as docs/ARCHITECTURE.md lists them.
+  // (e) The study link's defaults.
   {
     const page = openLab(glue, {search:"?study=alpha"});
     try {
@@ -1848,6 +1925,10 @@ console.log(`PASS research options: ${optionRuns} combinations of kernel, boson 
 const cdfChecks = verifyCdfBoundaries(engine);
 console.log(`PASS boson sampling at ${cdfChecks} forced draws on channel-distribution boundaries ` +
   "(ties and zero-weight channels) picks the reference's channel, on both engines");
+const rngRefusals = verifyRngStateContract(o => new WasmSim(engine, o), "WebAssembly") +
+  verifyRngStateContract(o => new LGCA(o), "JavaScript");
+console.log(`PASS the generator refuses ${rngRefusals} malformed saved states (short, long, index out of range, ` +
+  "words not 32-bit integers) on both engines, which stay as they were");
 const densityCases = verifyDensityStats();
 console.log(`PASS density diagnostics on ${densityCases} hand-worked lattices (empty, one pile, unequal piles, uniform)`);
 console.log(`Reference C++: ${reference.source}`);

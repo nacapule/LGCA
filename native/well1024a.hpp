@@ -13,8 +13,8 @@
 //
 // What must not change (docs/FIDELITY.md): the constants R = 32, M1 = 3, M2 = 24,
 // M3 = 10, the shifts 8 / 19 / 14 and 11 / 7 / 13, the factor FACT, the index walk
-// index = (index + 31) & 31, and the seeding rule of the reference main(). The test in
-// native/verify-native.mjs compares the first 10^6 doubles with the original C code.
+// index = (index + 31) & 31, and the seeding rule of the reference main(). The first
+// 10^6 doubles are checked against the original C code.
 
 #pragma once
 

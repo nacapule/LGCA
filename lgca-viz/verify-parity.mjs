@@ -6,8 +6,9 @@
 // at git HEAD (lgca_clean-1.cpp and rng/WELL1024a.c/.h), so an edit in the working tree
 // cannot change what the Lab is compared with; outside a git checkout that has those
 // files it is read from the working tree, with a note. Also checked: the empty lattice
-// against the reference's NaN conventions, and boson sampling at forced draws exactly on
-// the boundaries of the channel distribution.
+// against the reference's NaN conventions, boson sampling at forced draws exactly on
+// the boundaries of the channel distribution, and that the generator refuses a malformed
+// saved state without changing.
 
 import assert from "node:assert/strict";
 import {execFileSync} from "node:child_process";
@@ -260,8 +261,8 @@ function compareMetrics(actual, expected, label) {
 
 // The empty lattice (density 0), which the reference runs: its polar, nematic and band
 // divide by N = 0 and print NaN, and so do their errors; spatial order is 1 with error 0,
-// 1/occupied and its error are 0. The Lab keeps those conventions (docs/PHYSICS.md, "The
-// printed output and empty lattices"): NaN exactly where the reference prints it.
+// 1/occupied and its error are 0. The Lab keeps those conventions: NaN exactly where the
+// reference prints it.
 const emptyScenarios = [
   {model:"boson",   tsteps:3, iters:2, sens:2,   dens:0, seed:12345},
   {model:"fermion", tsteps:3, iters:2, sens:0.8, dens:0, seed:12345},
@@ -336,6 +337,46 @@ function verifyCdfBoundaries(make, engine) {
   return checks;
 }
 
+// The generator state contract (rng.setState): exactly 33 integers from 0 to 2^32 - 1, the
+// last (the index) below 32. Anything else throws a RangeError and leaves the generator as
+// it was; a valid state, typed or plain array, is taken word for word.
+function badRngStates(good) {
+  const edit = (q, v) => Array.from(good, (x, i) => i === q ? v : x);
+  const hole = Array.from(good); delete hole[3];
+  // every word different from the current state, so a setter that writes before it has
+  // checked everything shows (the index stays valid until the last word)
+  const other = Uint32Array.from(good, (x, i) => i < 32 ? ~x >>> 0 : (x + 7) % 32);
+  const late = (q, v) => Array.from(other, (x, i) => i === q ? v : x);
+  return [["32 words", good.slice(0, 32)], ["34 words", Uint32Array.from([...good, 0])],
+    ["index 32", edit(32, 32)], ["index -1", edit(32, -1)], ["a word of 2^32", edit(3, 2 ** 32)],
+    ["a negative word", edit(3, -1)], ["a fractional word", edit(3, 1.5)], ["a NaN word", edit(3, NaN)],
+    ["a missing word", edit(3, undefined)], ["a hole", hole], ["null", null], ["no words", []],
+    ["new words, then index 32", late(32, 32)], ["new words, then a NaN index", late(32, NaN)],
+    ["new words, the last 2^32", late(31, 2 ** 32)], ["32 new words", other.slice(0, 32)],
+    ["34 words, new ones", Uint32Array.from([...other, 0])]];
+}
+function verifyRngStateContract(make, engine) {
+  const options = {model:"boson", W:12, H:10, dens:0.4, seed:4242, kernel:"sum", bosonField:"site", bosonAlign:"nematic"};
+  const sim = make(options), twin = new LGCA(options);
+  try {
+    for (let t = 0; t < 3; t++) { sim.step(2); twin.step(2); }
+    const good = sim.rng.getState();
+    const cases = badRngStates(good);
+    for (const [what, bad] of cases) {
+      assert.throws(() => sim.rng.setState(bad), RangeError, `${engine}: rng.setState accepted ${what}`);
+      assert.deepEqual(Array.from(sim.rng.getState()), Array.from(good), `${engine}: a refused state (${what}) changed the generator`);
+    }
+    sim.rng.setState(Array.from(good));
+    for (let t = 0; t < 2; t++) { sim.step(2); twin.step(2); }
+    assert.deepEqual(Array.from(sim.rng.getState()), Array.from(twin.rng.getState()), `${engine}: the generator moved after the refusals`);
+    assert.deepEqual(Array.from(sim.occ), Array.from(twin.occ), `${engine}: the lattice moved after the refusals`);
+    const odd = Uint32Array.from(good, (x, i) => i === 0 ? 0 : i === 1 ? 0xffffffff : i === 32 ? 31 : x);
+    sim.rng.setState(odd);
+    assert.deepEqual(Array.from(sim.rng.getState()), Array.from(odd), `${engine}: a valid state was not taken word for word`);
+    return cases.length;
+  } finally { if (sim.destroy) sim.destroy(); }
+}
+
 function compareRng(sim, cppRng, label) {
   const jsRng=sim.rng.getState();
   assert.equal(cppRng.length, 33, `${label}: malformed C++ RNG state`);
@@ -361,6 +402,9 @@ console.log("PASS HTML structure, C++ defaults, and exact replay round trip");
 const cdfChecks = verifyCdfBoundaries(o => new LGCA(o), "JavaScript");
 console.log(`PASS boson sampling at ${cdfChecks} forced draws on channel-distribution boundaries ` +
   "(ties and zero-weight channels) picks the reference's channel");
+const rngRefusals = verifyRngStateContract(o => new LGCA(o), "JavaScript");
+console.log(`PASS the generator refuses ${rngRefusals} malformed saved states (short, long, index out of range, ` +
+  "words not 32-bit integers) and stays as it was");
 console.log(`Reference C++: ${reference.source}`);
 
 const tempDir=mkdtempSync(join(tmpdir(), "lgca-parity-"));

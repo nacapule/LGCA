@@ -3,7 +3,7 @@
 // A port of the reference program lgca/lgca_clean-1.cpp with the lattice size and the
 // model chosen at run time instead of at compile time. With the same seed it produces
 // the same lattice states and the same random-number stream as the reference, bit for
-// bit (checked by native/verify-native.mjs). The rules that keep it that way are in
+// bit (checked against the reference program). The rules that keep it that way are in
 // docs/FIDELITY.md:
 //   - the same random draws in the same order (initial fill, collisions);
 //   - the same floating-point operations in the same order (energies, Boltzmann
@@ -48,10 +48,9 @@ constexpr std::size_t POW_TABLE_SIZE = std::size_t(1) << 16;
 
 enum class Model { Fermion, Boson };
 
-// The Lab's research options (docs/PHYSICS.md, "The optional physics settings" and
-// "Power normalization and alpha"). The first value of each is the default and the
-// reference program's behaviour. Names as in the Lab's engine: kernel, alpha, bosonField,
-// bosonAlign.
+// The Lab's research options (docs/PHYSICS.md). The first value of each is the default
+// and the reference program's behaviour. Names as in the Lab's engine: kernel, alpha,
+// bosonField, bosonAlign.
 //
 // Kernel: what the field is divided by before it enters the collision.
 //   Sum    nothing (the reference);
@@ -182,10 +181,10 @@ public:
     void set_options(Kernel kernel, double alpha, BosonField field, BosonAlign align);
 
 private:
-    // native/verify-native.mjs compares the private collision arithmetic below (channel
-    // CDF, neighbour field, alignment energy, velocity tables) value by value with the
-    // reference and, for the research options, with the Lab's engine; its test program
-    // defines this struct to reach them.
+    // A test program compares the private collision arithmetic below (channel CDF,
+    // neighbour field, alignment energy, velocity tables) value by value with the
+    // reference and, for the research options, with the Lab's engine; it defines this
+    // struct to reach them.
     friend struct LgcaProbe;
 
     // How the kernel option divides the field, decided once in the constructor with the
@@ -246,7 +245,8 @@ private:
     std::vector<int32_t> src_;  // lattice after collision, before streaming
     Well1024a rng_;
     // pow(M, alpha_) for integer M below POW_TABLE_SIZE, filled on first use; -1 = not
-    // yet computed (every real value is at least 1). Reset whenever alpha_ may change.
+    // yet computed (every real value is at least 1). set_options() resets it when alpha_
+    // changes.
     // The const collision helpers fill it, so one engine must not be used from two
     // threads at once, not even through its const collision helpers.
     mutable std::vector<double> pow_table_;

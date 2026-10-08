@@ -2,6 +2,11 @@
 
 Each run's trace.json has one row per sample step: N, the island's mass and number of
 sites, the old cluster's mass and area, and other columns.
+
+Densities: an island or cluster with no sites has density 0. The old cluster has no sites
+when no site holds max(1, ceil(2N/A)) particles: at step 0 in the 90 x 90 boxes with 3.6 or
+more particles per site, where no site starts with that many. The native measurement also
+reports its density as 0 then.
 """
 import json
 import math
@@ -15,6 +20,12 @@ DENSITY_DIR = STUDY / "density"    # more particles from a denser 90 x 90 box
 
 BOX_DENS = 0.4                     # per channel: 2.4 particles per site
 DENSITY_L = 90
+
+# Late values: the samples (or saved lattices) at steps t with LATE_FRACTION * T < t <= T,
+# where T is the end of the run. The same window for every island.
+LATE_FRACTION = 0.75
+# Every averaged curve and late value needs at least this many distinct seeds.
+MIN_SEEDS = 4
 
 
 def load(folder, horizon=None):
@@ -42,6 +53,12 @@ def load(folder, horizon=None):
     return runs
 
 
+def density(mass, area):
+    """Particles per site; 0 where there are no sites (no island, or no old cluster)."""
+    mass, area = np.asarray(mass, float), np.asarray(area, float)
+    return np.divide(mass, area, out=np.zeros_like(mass), where=area > 0)
+
+
 def add_derived(run):
     sites = run["size"] ** 2
     N = run["N"][0]
@@ -49,21 +66,56 @@ def add_derived(run):
     run["sites"] = sites
     run["mean"] = N / sites
     with np.errstate(invalid="ignore", divide="ignore"):
-        run["rho"] = run["islandMass"] / run["islandArea"]           # island density
+        run["rho"] = density(run["islandMass"], run["islandArea"])   # island density
         run["frac"] = run["islandMass"] / N                          # island's share of N
         run["ratio"] = run["rho"] / run["mean"]
-        run["rhoOld"] = np.where(run["clusterArea"] > 0,
-                                 run["clusterMass"] / run["clusterArea"], np.nan)
+        run["rhoOld"] = density(run["clusterMass"], run["clusterArea"])
         run["fracOld"] = run["clusterMass"] / N                      # old cluster's share
         run["occFrac"] = run["occupied"] / sites
         run["compsPerSite"] = run["components"] / sites
         run["isHeaviest"] = (run["islandMass"] == run["largestMass"]).astype(float)
 
 
-def late(run, key, start_fraction=0.75):
-    """Mean of `key` over the last quarter of the run (t > 3/4 of its horizon)."""
-    t = run["t"]
-    return float(np.nanmean(run[key][t > start_fraction * run["reached"]]))
+def in_late_window(t, horizon):
+    """True for the steps of the late window: LATE_FRACTION * horizon < t <= horizon."""
+    t = np.asarray(t)
+    return (t > LATE_FRACTION * horizon) & (t <= horizon)
+
+
+def late(run, key, strict=False):
+    """Mean of `key` over the late window of the run. Columns that can be undefined at a
+    sample (such as rg) skip those samples; with strict=True an undefined sample stops."""
+    values = run[key][in_late_window(run["t"], run["reached"])]
+    if not len(values):
+        raise SystemExit(f"{describe(run)}: no samples in the late window")
+    if strict:
+        if not np.isfinite(values).all():
+            raise SystemExit(f"{describe(run)}: undefined {key} in the late window")
+        return float(np.mean(values))
+    return float(np.nanmean(values))
+
+
+def describe(run):
+    return f"L {run['size']} alpha {run['alpha']:g} dens {run['dens']:g} seed {run['seed']}"
+
+
+def check_group(runs, what):
+    """Stop unless `runs` are at least MIN_SEEDS runs with distinct seeds, the same
+    horizon and the same sample steps, so that their means are seed means at equal times."""
+    seeds = [r["seed"] for r in runs]
+    if len(set(seeds)) != len(seeds):
+        raise SystemExit(f"{what}: a seed appears twice ({sorted(seeds)})")
+    if len(seeds) < MIN_SEEDS:
+        raise SystemExit(f"{what}: {len(seeds)} seeds ({sorted(seeds)}), at least {MIN_SEEDS} needed")
+    if len({r["reached"] for r in runs}) != 1:
+        raise SystemExit(f"{what}: the runs end at different steps "
+                         f"({sorted({r['reached'] for r in runs})})")
+    t0 = runs[0]["t"]
+    for r in runs[1:]:
+        if not np.array_equal(r["t"], t0):
+            raise SystemExit(f"{what}: seed {r['seed']} is sampled at other steps than "
+                             f"seed {runs[0]['seed']}")
+    return len(seeds)
 
 
 def group(runs, **settings):

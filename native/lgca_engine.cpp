@@ -2,9 +2,13 @@
 //
 // Every function below is the reference function of the same name in
 // lgca/lgca_clean-1.cpp, with lattice[x][y][k] replaced by occ[(y*W + x)*6 + k]. The
-// loops, the order of the random draws and the order of the floating-point operations
-// are the reference's, line for line; comments point out the places where that order
-// matters. Do not "simplify" an expression here without reading docs/FIDELITY.md.
+// order of the random draws and the order of the floating-point operations are the
+// reference's; comments point out the places where that order matters. A few loops are
+// written differently for speed, each with a comment saying why it computes the same
+// values: streaming (pull form, row by row), the fermion collision (occupancy as a bit
+// mask, log skipped when acceptance is certain), the boson channel draw (a count instead
+// of a scan), exp(0) taken as 1, and pow(M, alpha) kept in a table. Do not "simplify" an
+// expression here without reading docs/FIDELITY.md.
 //
 // The exceptions are the research options (fermion_field(), channel_cdf_options()),
 // which the reference does not have: they follow the Lab's JavaScript engine
@@ -25,15 +29,25 @@ namespace {
 
 template <class T> inline T sqr(T a) { return a * a; }
 
+// std::exp(a), except that a == 0 (+0 or -0) gives 1 without the call: exp(+-0) is
+// exactly 1 (C Annex F; Apple's libm and Emscripten's musl both return it). A NaN
+// fails the test and still goes to std::exp.
+inline double exp_or_one(double a) { return (a == 0.0) ? 1.0 : std::exp(a); }
+
 // The six neighbours of a site, in the order of the reference's neighbour_field().
 // The order fixes the order of the floating-point sums of the field.
 constexpr int NEIGHBOUR[NODES][2] = {{+1, 0}, {0, +1}, {-1, 0},
                                      {0, -1}, {+1, -1}, {-1, +1}};
 
 // Streaming: a particle in channel k at (i, j) moves to (i + dx, j + dy), with the
-// offsets of the reference's streaming block (periodic boundaries).
+// offsets of the reference's streaming block (periodic boundaries). step() reads them
+// in pull form; the assertion ties its six reads to this table.
 constexpr int STREAM[NODES][2] = {{+1, 0}, {+1, -1}, {0, -1},
                                   {-1, 0}, {-1, +1}, {0, +1}};
+static_assert(STREAM[0][0] == +1 && STREAM[0][1] == 0 && STREAM[1][0] == +1 && STREAM[1][1] == -1 &&
+              STREAM[2][0] == 0 && STREAM[2][1] == -1 && STREAM[3][0] == -1 && STREAM[3][1] == 0 &&
+              STREAM[4][0] == -1 && STREAM[4][1] == +1 && STREAM[5][0] == 0 && STREAM[5][1] == +1,
+              "step() reads the streaming offsets in this order");
 
 }  // namespace
 
@@ -58,6 +72,7 @@ Lgca::Lgca(const Params& params)
     if (const char* error = params_error(params))
         throw std::invalid_argument(error);
 
+    pow_table_.assign(POW_TABLE_SIZE, -1.0);
     decide_collision();
 
     // Channel vectors and kernels exactly as the reference constructor builds them:
@@ -85,6 +100,7 @@ Lgca::Lgca(const Params& params)
 // `kernel == "power" && alpha !== 0`, at every collision; kernel and alpha change only
 // through the constructor and set_options(), so the outcome is decided there, once.
 void Lgca::decide_collision() {
+    std::fill(pow_table_.begin(), pow_table_.end(), -1.0);   // alpha may have changed
     if (kernel_ == Kernel::Avg || (kernel_ == Kernel::Power && alpha_ == 1.0))
         norm_ = Norm::ByCount;
     else if (kernel_ == Kernel::Power && alpha_ != 0.0)
@@ -93,6 +109,22 @@ void Lgca::decide_collision() {
         norm_ = Norm::None;
     reference_boson_ = boson_field_ == BosonField::Site &&
                        boson_align_ == BosonAlign::Nematic && norm_ == Norm::None;
+}
+
+// pow(m, alpha_) for a particle count m. For an integer m from 1 to POW_TABLE_SIZE - 1
+// the value is computed once with std::pow and kept: std::pow is deterministic, so the
+// kept value is the one every later call would return. Other m (not an integer, below 1,
+// too large) call std::pow directly. The table is reset whenever alpha_ may change.
+double Lgca::pow_alpha(double m) const {
+    if (m >= 1.0 && m < static_cast<double>(POW_TABLE_SIZE)) {
+        const std::size_t q = static_cast<std::size_t>(m);
+        if (static_cast<double>(q) == m) {
+            double& slot = pow_table_[q];
+            if (slot < 0.0) slot = std::pow(m, alpha_);
+            return slot;
+        }
+    }
+    return std::pow(m, alpha_);
 }
 
 void Lgca::set_options(Kernel kernel, double alpha, BosonField field, BosonAlign align) {
@@ -143,27 +175,49 @@ void Lgca::init_lattice() {
 
 void Lgca::step(double sens) {
     // (1) Collision, sites in the reference order (i outer, j inner). An empty site
-    // draws no random numbers and leaves zeros in src.
-    std::fill(src_.begin(), src_.end(), 0);
+    // draws no random numbers and gets zeros in src. Every src value is written here
+    // exactly once (collide_fermion and collide_boson write all six channels), so src
+    // needs no clearing beforehand.
     for (int i = 0; i < W_; ++i)
         for (int j = 0; j < H_; ++j) {
             const std::size_t s = site(i, j);
-            if (is_empty(&occ_[s])) continue;
-            if (model_ == Model::Fermion) collide_fermion(i, j, sens, &src_[s]);
-            else collide_boson(i, j, sens, &src_[s]);
+            int32_t* out = &src_[s];
+            if (is_empty(&occ_[s])) {
+                for (int k = 0; k < NODES; ++k) out[k] = 0;
+                continue;
+            }
+            if (model_ == Model::Fermion) collide_fermion(i, j, sens, out);
+            else collide_boson(i, j, sens, out);
         }
 
-    // (2) Streaming. Every destination channel is written exactly once, so plain
-    // assignment both moves the particles and clears the old lattice.
-    for (int i = 0; i < W_; ++i)
-        for (int j = 0; j < H_; ++j) {
-            const std::size_t from = site(i, j);
-            for (int k = 0; k < NODES; ++k) {
-                const int x = (i + STREAM[k][0] + W_) % W_;
-                const int y = (j + STREAM[k][1] + H_) % H_;
-                occ_[site(x, y) + k] = src_[from + k];
-            }
+    // (2) Streaming, in pull form: channel k of site (x, y) receives channel k of site
+    // (x - dx_k, y - dy_k), with (dx_k, dy_k) = STREAM[k] and periodic wrap. That is the
+    // inverse of the reference's push (from (i, j) to (i + dx_k, j + dy_k)), a bijection
+    // for each k, so every occ value is written exactly once with the same value as the
+    // push form gives; written row by row in memory order, with the wrap done by compares
+    // instead of the remainder operator. Offsets are size_t, so no int can overflow.
+    const std::size_t W = static_cast<std::size_t>(W_), H = static_cast<std::size_t>(H_);
+    const std::size_t row = W * NODES;
+    for (std::size_t y = 0; y < H; ++y) {
+        const std::size_t ym = (y == 0) ? H - 1 : y - 1;   // row y - 1
+        const std::size_t yp = (y == H - 1) ? 0 : y + 1;   // row y + 1
+        int32_t* d = &occ_[y * row];
+        const int32_t* r0 = &src_[y * row];
+        const int32_t* rp = &src_[yp * row];
+        const int32_t* rm = &src_[ym * row];
+        for (std::size_t x = 0; x < W; ++x) {
+            const std::size_t x0 = x * NODES;
+            const std::size_t xm = ((x == 0) ? W - 1 : x - 1) * NODES;   // column x - 1
+            const std::size_t xp = ((x == W - 1) ? 0 : x + 1) * NODES;   // column x + 1
+            int32_t* o = d + x0;
+            o[0] = r0[xm + 0];   // STREAM[0] = (+1,  0): from (x - 1, y)
+            o[1] = rp[xm + 1];   // STREAM[1] = (+1, -1): from (x - 1, y + 1)
+            o[2] = rp[x0 + 2];   // STREAM[2] = ( 0, -1): from (x,     y + 1)
+            o[3] = r0[xp + 3];   // STREAM[3] = (-1,  0): from (x + 1, y)
+            o[4] = rm[xp + 4];   // STREAM[4] = (-1, +1): from (x + 1, y - 1)
+            o[5] = rm[x0 + 5];   // STREAM[5] = ( 0, +1): from (x,     y - 1)
         }
+    }
     ++t_;
 }
 
@@ -175,25 +229,41 @@ void Lgca::step(double sens) {
 // permutation of the channels and accept it if log(u) < E_trial - E. Each proposal
 // draws 5 numbers (Fisher-Yates) and the acceptance test 1 more: 72 draws per occupied
 // site, whatever is accepted.
+//
+// The occupancy is a 6-bit mask (bit k = channel k) instead of the reference's array of
+// six 0/1 values. The acceptance number u is always drawn, after the permutation, as in
+// the reference. log(u) is skipped when d = E_trial - E >= 0 (also d = -0): the generator
+// returns u in [0, 1), so log(u) < 0 (or -inf for u = 0) and the reference's test
+// log(u) < d accepts. Every other d, NaN included, takes the reference's test unchanged.
+// (Not !(d < 0): that would accept a NaN difference, which the reference rejects.)
 void Lgca::collide_fermion(int i, int j, double sens, int32_t* out) {
     double h[NODES];
     collision_field(i, j, h);
 
-    int current[NODES];
     const int32_t* s = &occ_[site(i, j)];
-    for (int k = 0; k < NODES; ++k) current[k] = (s[k] != 0) ? 1 : 0;
+    unsigned current = 0;
+    for (int k = 0; k < NODES; ++k)
+        if (s[k] != 0) current |= 1u << k;
     double E = align_energy(current, h, sens);
 
-    int trial[NODES];
     for (int step = 0; step < METROPOLIS_STEPS; ++step) {
-        random_permutation(trial, current);
+        // The reference's random_permutation(): a Fisher-Yates shuffle of the channel
+        // indices (draws for positions 5, 4, 3, 2, 1), then channel k's particle moves to
+        // channel perm[k] (its out[perm[k]] = in[k], here on bit masks).
+        int perm[NODES] = {0, 1, 2, 3, 4, 5};
+        for (int k = NODES - 1; k > 0; --k) std::swap(perm[k], perm[rand_int(k + 1)]);
+        unsigned trial = 0;
+        for (int k = 0; k < NODES; ++k)
+            if ((current >> k) & 1u) trial |= 1u << perm[k];
         const double E_trial = align_energy(trial, h, sens);
-        if (std::log(rng_.next()) < E_trial - E) {
-            for (int k = 0; k < NODES; ++k) current[k] = trial[k];
+        const double u = rng_.next();
+        const double d = E_trial - E;
+        if (d >= 0.0 || std::log(u) < d) {
+            current = trial;
             E = E_trial;
         }
     }
-    for (int k = 0; k < NODES; ++k) out[k] = current[k];
+    for (int k = 0; k < NODES; ++k) out[k] = static_cast<int32_t>((current >> k) & 1u);
 }
 
 // The field of a fermion collision at (i, j): the reference's neighbour_field(), or
@@ -203,25 +273,42 @@ void Lgca::collision_field(int i, int j, double h[NODES]) const {
     else fermion_field(i, j, h);                           // kernel Avg or Power
 }
 
-// E = sens * (sum of h over the occupied channels). The sum skips empty channels,
-// as the reference does, rather than adding 0 * h.
-double Lgca::align_energy(const int conf[NODES], const double h[NODES], double sens) const {
+// E = sens * (sum of h over the occupied channels). The sum runs over the channels in
+// order 0..5 and skips empty ones, as the reference does, rather than adding 0 * h.
+double Lgca::align_energy(unsigned conf, const double h[NODES], double sens) const {
     double s = 0.0;
     for (int k = 0; k < NODES; ++k)
-        if (conf[k]) s += h[k];
+        if ((conf >> k) & 1u) s += h[k];
     return sens * s;
+}
+
+// The same for an occupancy given as six values (nonzero = occupied), the reference's
+// form; native/verify-native.mjs compares it with the reference's align_energy().
+double Lgca::align_energy(const int conf[NODES], const double h[NODES], double sens) const {
+    unsigned mask = 0;
+    for (int k = 0; k < NODES; ++k)
+        if (conf[k]) mask |= 1u << k;
+    return align_energy(mask, h, sens);
 }
 
 // m_k = the number of particles in channel k summed over the 6 neighbours of (i, j),
 // accumulated neighbour by neighbour in NEIGHBOUR order (the Lab's neighbourField()).
+// The wrap uses compares instead of the remainder operator (the same neighbours: i and j
+// are in [0, W) and [0, H)); the reference wraps y with ny (correct).
 void Lgca::neighbour_counts(int i, int j, double m[NODES]) const {
+    const int ip = (i == W_ - 1) ? 0 : i + 1, im = (i == 0) ? W_ - 1 : i - 1;
+    const int jp = (j == H_ - 1) ? 0 : j + 1, jm = (j == 0) ? H_ - 1 : j - 1;
+    // The neighbours in NEIGHBOUR order: (+1,0) (0,+1) (-1,0) (0,-1) (+1,-1) (-1,+1).
+    static_assert(NEIGHBOUR[0][0] == +1 && NEIGHBOUR[0][1] == 0 && NEIGHBOUR[1][0] == 0 &&
+                  NEIGHBOUR[1][1] == +1 && NEIGHBOUR[2][0] == -1 && NEIGHBOUR[2][1] == 0 &&
+                  NEIGHBOUR[3][0] == 0 && NEIGHBOUR[3][1] == -1 && NEIGHBOUR[4][0] == +1 &&
+                  NEIGHBOUR[4][1] == -1 && NEIGHBOUR[5][0] == -1 && NEIGHBOUR[5][1] == +1,
+                  "neighbour_counts() visits the neighbours in this order");
+    const int32_t* const n[NODES] = {&occ_[site(ip, j)], &occ_[site(i, jp)], &occ_[site(im, j)],
+                                     &occ_[site(i, jm)], &occ_[site(ip, jm)], &occ_[site(im, jp)]};
     for (int k = 0; k < NODES; ++k) m[k] = 0.0;
-    for (const auto& d : NEIGHBOUR) {
-        const int x = (i + d[0] + W_) % W_;
-        const int y = (j + d[1] + H_) % H_;   // the reference wraps y with ny (correct)
-        const int32_t* n = &occ_[site(x, y)];
-        for (int k = 0; k < NODES; ++k) m[k] += n[k];
-    }
+    for (int d = 0; d < NODES; ++d)
+        for (int k = 0; k < NODES; ++k) m[k] += n[d][k];
 }
 
 // h_a = sum_k J[a][k] * m_k, with m from neighbour_counts(): the reference's field.
@@ -256,21 +343,10 @@ void Lgca::fermion_field(int i, int j, double h[NODES]) const {
         double M = 0;
         for (int k = 0; k < NODES; ++k) M += m[k];
         if (M != 0) {
-            const double divisor = std::pow(M, alpha_);
+            const double divisor = pow_alpha(M);   // std::pow(M, alpha_)
             for (int a = 0; a < NODES; ++a) h[a] /= divisor;
         }
     }
-}
-
-// Fisher-Yates shuffle of the channel indices (draws for positions 5, 4, 3, 2, 1),
-// then out[perm[k]] = in[k].
-void Lgca::random_permutation(int out[NODES], const int in[NODES]) {
-    int perm[NODES];
-    for (int k = 0; k < NODES; ++k) perm[k] = k;
-    for (int k = NODES - 1; k > 0; --k) std::swap(perm[k], perm[rand_int(k + 1)]);
-    for (int k = 0; k < NODES; ++k) out[k] = 0;
-    for (int k = 0; k < NODES; ++k)
-        if (in[k]) out[perm[k]] = 1;
 }
 
 // ----------------------------------------------------------------------------------
@@ -310,7 +386,7 @@ void Lgca::channel_cdf(const int32_t* s, double sens, double prob[NODES]) const 
     }
     const double mx = *std::max_element(prob, prob + NODES);
     double z = 0.0;
-    for (int c = 0; c < NODES; ++c) { prob[c] = std::exp(prob[c] - mx); z += prob[c]; }
+    for (int c = 0; c < NODES; ++c) { prob[c] = exp_or_one(prob[c] - mx); z += prob[c]; }
     for (int c = 0; c < NODES; ++c) prob[c] /= z;
     for (int c = 1; c < NODES; ++c) prob[c] += prob[c - 1];
 }
@@ -361,18 +437,18 @@ void Lgca::channel_cdf_options(int i, int j, int n, double sens, double prob[NOD
         for (int c = 0; c < NODES; ++c) {
             double v = prob[c] - mx;
             if (numparts != 0) v /= numparts;
-            prob[c] = std::exp(v);
+            prob[c] = exp_or_one(v);
             z += prob[c];
         }
     } else if (norm_ == Norm::ByPower) {
-        const double divisor = (numparts == 0) ? 1.0 : std::pow(numparts, alpha_);
+        const double divisor = (numparts == 0) ? 1.0 : pow_alpha(numparts);   // std::pow(numparts, alpha_)
         for (int c = 0; c < NODES; ++c) {
-            prob[c] = std::exp((prob[c] - mx) / divisor);
+            prob[c] = exp_or_one((prob[c] - mx) / divisor);
             z += prob[c];
         }
     } else {
         for (int c = 0; c < NODES; ++c) {
-            prob[c] = std::exp(prob[c] - mx);
+            prob[c] = exp_or_one(prob[c] - mx);
             z += prob[c];
         }
     }
@@ -381,9 +457,19 @@ void Lgca::channel_cdf_options(int i, int j, int n, double sens, double prob[NOD
 }
 
 // One draw r; the first channel with r <= CDF; channel 5 if rounding left the CDF
-// just below r.
+// just below r (the reference's scan).
+//
+// Without a NaN the CDF never decreases: its terms are exp() values (>= 0) divided by
+// their positive sum, and adding a term >= 0 cannot lower a rounded sum. Then the channels
+// c = 0..4 with r > prob[c] are exactly those before the first c with r <= prob[c], so
+// their number is the channel the scan returns (5 when there is none). Counting avoids a
+// branch the processor mispredicts on almost every draw when the distribution is spread.
+// A NaN anywhere in the CDF reaches prob[5] (every later cumulative sum is NaN), and then
+// the scan itself runs.
 int Lgca::sample_channel(const double prob[NODES]) {
     const double r = rng_.next();
+    if (prob[NODES - 1] == prob[NODES - 1])
+        return (r > prob[0]) + (r > prob[1]) + (r > prob[2]) + (r > prob[3]) + (r > prob[4]);
     for (int c = 0; c < NODES; ++c)
         if (r <= prob[c]) return c;
     return NODES - 1;
@@ -427,8 +513,8 @@ Order Lgca::measure() const {
 }
 
 // The reference's measure_band(): local nematic order of the particles on the four
-// rings around each occupied site. One deliberate change (docs/FIDELITY.md, "Deliberate
-// deviation"): the reference's channel loop starts at m = 1, skipping channel 0; here it
+// rings around each occupied site. One deliberate change (docs/FIDELITY.md, "The band
+// correction"): the reference's channel loop starts at m = 1, skipping channel 0; here it
 // counts all six (m = 0). The site weight nsite is summed once per ring, 4 times, and
 // divided by 4 below, as in the reference.
 double Lgca::band() const {

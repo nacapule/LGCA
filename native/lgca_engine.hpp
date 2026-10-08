@@ -10,7 +10,10 @@
 //     weights, observables), compiled with -ffp-contract=off and never -ffast-math;
 //   - the reference's quirks kept as they are (see measure() below, and init_lattice()
 //     for the fermion model with dens >= 1); one deliberate exception, band() counts
-//     channel 0 (docs/FIDELITY.md, "Deliberate deviation").
+//     channel 0 (docs/FIDELITY.md, "The band correction").
+// Some loops are written differently from the reference for speed (streaming, the
+// fermion occupancy as a bit mask, the boson channel draw, cached powers); each says in
+// lgca_engine.cpp why it gives the same values, draws and states.
 //
 // It also has the Lab's research options (kernel sum / avg / power with exponent alpha,
 // boson field from the site / its neighbours / both, nematic or polar boson alignment;
@@ -37,11 +40,18 @@ namespace lgca {
 constexpr int NODES = 6;              // velocity channels of the hexagonal lattice
 constexpr int METROPOLIS_STEPS = 12;  // fermion collision: proposals per site
 
+// The power kernel divides by pow(M, alpha) for a particle count M. The engine keeps the
+// values for M = 1 .. POW_TABLE_SIZE - 1 in a table it allocates once, at construction
+// (POW_TABLE_SIZE doubles, 512 KiB); larger counts call std::pow every time. A caller that
+// checks memory before constructing (native/wasm/lgca_wasm.cpp) counts this table too.
+constexpr std::size_t POW_TABLE_SIZE = std::size_t(1) << 16;
+
 enum class Model { Fermion, Boson };
 
-// The Lab's research options (docs/PHYSICS.md, "Physics toggles" and "Power
-// normalization"). The first value of each is the default and the reference program's
-// behaviour. Names as in the Lab's engine: kernel, alpha, bosonField, bosonAlign.
+// The Lab's research options (docs/PHYSICS.md, "The optional physics settings" and
+// "Power normalization and alpha"). The first value of each is the default and the
+// reference program's behaviour. Names as in the Lab's engine: kernel, alpha, bosonField,
+// bosonAlign.
 //
 // Kernel: what the field is divided by before it enters the collision.
 //   Sum    nothing (the reference);
@@ -207,11 +217,13 @@ private:
     void neighbour_counts(int i, int j, double m[NODES]) const;
     void neighbour_field(int i, int j, double h[NODES]) const;
     void fermion_field(int i, int j, double h[NODES]) const;
+    // A fermion site's occupancy as a bit mask: bit k set = channel k holds a particle.
+    double align_energy(unsigned conf, const double h[NODES], double sens) const;
     double align_energy(const int conf[NODES], const double h[NODES], double sens) const;
-    void random_permutation(int out[NODES], const int in[NODES]);
     void channel_cdf(const int32_t* s, double sens, double prob[NODES]) const;
     void channel_cdf_options(int i, int j, int n, double sens, double prob[NODES]) const;
     int sample_channel(const double prob[NODES]);
+    double pow_alpha(double m) const;
 
     int W_, H_;
     Model model_;
@@ -233,6 +245,11 @@ private:
     std::vector<int32_t> occ_;  // lattice before collision (after the last streaming)
     std::vector<int32_t> src_;  // lattice after collision, before streaming
     Well1024a rng_;
+    // pow(M, alpha_) for integer M below POW_TABLE_SIZE, filled on first use; -1 = not
+    // yet computed (every real value is at least 1). Reset whenever alpha_ may change.
+    // The const collision helpers fill it, so one engine must not be used from two
+    // threads at once, not even through its const collision helpers.
+    mutable std::vector<double> pow_table_;
 };
 
 }  // namespace lgca

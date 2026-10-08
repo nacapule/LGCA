@@ -4,9 +4,17 @@
 
 Reads page-data.json (build/page_data.py) and heaviest.json (build/heaviest.py) and writes:
 
-  island-density-vs-time.csv   seed-mean island density at each sampled step
+  island-density-vs-time.csv   seed-mean island density at each sampled step (the same steps
+                               in both boxes)
   late-island-density.csv      late island density, with the smallest and largest seed value
   islands-at-saved-steps.csv   the islands of every saved lattice, one row per lattice
+
+Late values use one window for every island, the steps t with 3/4 T < t <= T for a run
+ending at step T. `steps` gives the samples used: for old and new the first and last sample
+step of the window (every sample between them counts), for densest the saved lattices in
+the window (only the one at step T, until the densest island is traced at every step).
+An `old` density of 0 means that no site held enough particles to form the old cluster
+(at step 0 in the 90 x 90 boxes with 3.6 or more particles per site).
 """
 import csv
 import json
@@ -38,8 +46,9 @@ def settings(route, e, data):
 
 
 def window(late):
-    """The late window: from the first sample after three quarters of the run to its end."""
-    return f"{int(0.75 * late['T']) + 100}-{late['T']}"
+    """The late window's first and last sample step."""
+    first, last = late["window"]
+    return f"{first}-{last}"
 
 
 def main():

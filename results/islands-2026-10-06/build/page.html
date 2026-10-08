@@ -149,11 +149,11 @@ table.data td.dim { color: var(--muted); }
 table.data td.strong { font-weight: 700; }
 
 /* tooltip */
-.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,0.18), 0 0 0 1px var(--line); border-radius: 6px; padding: 6px 9px; font-size: 13.5px; max-width: 360px; }
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,0.18), 0 0 0 1px var(--line); border-radius: 6px; padding: 6px 9px; font-size: 13.5px; max-width: min(440px, calc(100vw - 16px)); }
 .tip .t { color: var(--muted); font-size: 12.5px; margin-bottom: 3px; }
 .tip .row { display: flex; align-items: center; gap: 7px; line-height: 1.45; white-space: nowrap; }
 .tip .row .v { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
-.tip .row .l { color: var(--ink-2); }
+.tip .row .l { color: var(--ink-2); white-space: normal; }   /* wraps only on a narrow screen */
 
 /* bottom folds */
 details.fold summary { cursor: pointer; font-size: 14px; color: var(--ink-2); padding: 3px 0; font-weight: 700; }
@@ -230,7 +230,7 @@ details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
 <div class="pop" id="pop" hidden role="tooltip"></div>
 
 <!-- the notes at the bottom of the page: [{"title": ..., "text": ...}, ...] -->
-<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over the end of the runs (steps 60,100 to 80,000; the densest island at the lattices of steps 60,000 and 80,000), the new island's density grows 6.4 to 68 times, the old cluster's 5.0 to 41 times and the densest island's 8.0 to 82 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. These windows are past the end of the charts; the values are in the data files."}, {"title": "At α ≤ 0.8 the density levels off, higher in bigger boxes.", "text": "Between steps 40,000–60,000 and 60,000–80,000 it changes by less than 1% at α ≤ 0.5 and by up to 8% at α 0.8. At α ≤ 0.5 the busiest site stays the same from step 5,000 to 80,000 in 63 of 66 runs."}, {"title": "α 0.85 to 0.94 has not settled by step 80,000.", "text": "In the larger boxes the island density still changes by −26% to +44% between the same two windows."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 1.0 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved at step 5,000 and later, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 90% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are trends at finite times and box sizes. The densest island is known only at the saved lattices."}]</script>
+<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over the end of the runs (steps 60,100 to 80,000; the densest island at the lattice of step 80,000), the new island's density grows 6.4 to 68 times, the old cluster's 5.0 to 41 times and the densest island's 7.5 to 154 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. These windows are past the end of the charts; the values are in the data files."}, {"title": "At α ≤ 0.8 the density levels off, higher in bigger boxes.", "text": "Between steps 40,000–60,000 and 60,000–80,000 it changes by less than 1% at α ≤ 0.5 and by up to 8% at α 0.8. At α ≤ 0.5 the largest number of particles on one site stays the same from step 5,000 to 80,000 in 63 of 66 runs, while the pile that holds them keeps moving across the box."}, {"title": "α 0.85 to 0.94 has not settled by step 80,000.", "text": "Between the same two windows the island density still changes by −26% to +44% at L 360 and 480, and by −54% to +68% over all box sizes."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 1.0 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved at step 5,000 and later, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 89% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are trends at finite times and box sizes. The densest island is known only at the saved lattices."}]</script>
 <script id="page-data" type="application/json"></script>
 
 <script>
@@ -254,7 +254,7 @@ const RULES = {
   busiest: { label: "new", chip: "new", short: "new", cp: false, key: "rho",
              def: "The island containing the site with the most particles: every occupied site connected to it. Every sample step." },
   densest: { label: "densest", chip: "densest", short: "densest", cp: true, key: "rhoDensest",
-             def: "Of all islands (each a whole group of connected occupied sites), the one with the most particles per site (particles ÷ sites). Saved lattices only: 7 points per curve.",
+             def: "Of all islands (each a whole group of connected occupied sites), the one with the most particles per site (particles ÷ sites). Saved lattices only: 7 points per curve; its late value is the saved lattice at the end of the run.",
              caveat: "A lone site counts as an island: at α ≤ 0.75 it is then a pile of 14 to 3,940 particles; at α ≥ 0.83 it is sometimes a lone site with 2 to 7 particles." },
 };
 const RULE_ORDER = ["old", "busiest", "densest"];
@@ -335,7 +335,7 @@ function glyph(style, color) {
     svg.append(s("line", { x1: 1, x2: 20, y1: 6, y2: 6, style: "stroke:" + color + ";stroke-width:" + w + ";stroke-linecap:round" }));
     const mk = markerPath("circle", 25.5, 6, 3.3); mk.setAttribute("style", "fill:" + (style.hollow ? "none" : color) + ";stroke:" + color + ";stroke-width:" + (style.hollow ? 1.5 : 0)); svg.append(mk);
   } else if (style.markers) {
-    const ls = style.connector ? "stroke-width:1.2;opacity:0.55;stroke-dasharray:2 3" : "stroke-width:" + Math.min(w, 2) + ";opacity:0.75" + (style.dash ? ";stroke-dasharray:" + style.dash : "");
+    const ls = style.connector ? "stroke-width:" + (style.connectorWidth || 1.2) + ";opacity:0.55;stroke-dasharray:2 3" : "stroke-width:" + Math.min(w, 2) + ";opacity:0.75" + (style.dash ? ";stroke-dasharray:" + style.dash : "");
     svg.append(s("line", { x1: 1, x2: 29, y1: 6, y2: 6, style: "stroke:" + color + ";" + ls }));
     for (const cx of [5, 15, 25]) { const mk = markerPath(style.shape, cx, 6, 3.4); mk.setAttribute("style", "fill:" + (style.hollow ? "none" : color) + ";stroke:" + color + ";stroke-width:" + (style.hollow ? 1.5 : 0)); svg.append(mk); }
   } else {
@@ -493,7 +493,7 @@ function drawLineChart(host, spec) {
       let d = "", pen = false;
       for (const [x, y] of sr.points) { if (!ok(x, y)) { pen = false; continue; } d += (pen ? "L" : "M") + X(x).toFixed(1) + " " + Y(y).toFixed(1); pen = true; }
       const style = sr.connector
-        ? "stroke:" + sr.color + ";stroke-width:1;opacity:0.5;stroke-dasharray:2 4;stroke-linecap:round"
+        ? "stroke:" + sr.color + ";stroke-width:" + (compact ? Math.max(1, (sr.width || 1) * 0.7) : (sr.width || 1)) + ";opacity:0.5;stroke-dasharray:2 4;stroke-linecap:round"
         : "stroke:" + sr.color + ";stroke-width:" + (compact ? Math.max(1, (sr.width || 2) * 0.7) : (sr.width || 2)) + ";opacity:" + (sr.opacity ?? 1) + ";stroke-linejoin:round;stroke-linecap:round" + (sr.dash ? ";stroke-dasharray:" + (compact ? "4 3" : sr.dash) : "");
       gData.append(s("path", { d, fill: "none", style }));
     }
@@ -528,14 +528,8 @@ function drawLineChart(host, spec) {
   if (spec.hover === "x") {
     const xset = uniq(tipSeries.flatMap((sr) => sr.points.filter(([x, y]) => ok(x, y)).map(([x]) => x)));
     const px = xset.map((x) => X(x));
-    const valid = tipSeries.map((sr) => sr.points.filter(([x, y]) => ok(x, y)));
-    const tol = Math.log10(1.03);
-    const nearest = (pts, xv) => {
-      let lo = 0, hi = pts.length - 1;
-      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (pts[mid][0] < xv) lo = mid; else hi = mid; }
-      const best = Math.abs(Math.log10(pts[lo][0] / xv)) <= Math.abs(Math.log10(pts[hi][0] / xv)) ? pts[lo] : pts[hi];
-      return (logX ? Math.abs(Math.log10(best[0] / xv)) <= tol : Math.abs(best[0] - xv) <= 0.03 * xv) ? best : null;
-    };
+    // every curve's value at exactly the hovered step (both boxes share their sample steps); none where a curve has no sample there
+    const valid = tipSeries.map((sr) => new Map(sr.points.filter(([x, y]) => ok(x, y))));
     svg.addEventListener("pointermove", (ev) => {
       const rc = svg.getBoundingClientRect(); const mx = (ev.clientX - rc.left) * (W / rc.width);
       if (!px.length) return;
@@ -545,7 +539,7 @@ function drawLineChart(host, spec) {
       const xv = xset[i];
       cross.setAttribute("x1", px[i]); cross.setAttribute("x2", px[i]); cross.style.display = "";
       const rows = [];
-      tipSeries.forEach((sr, k) => { if (!valid[k].length) return; const p = nearest(valid[k], xv); if (p) rows.push({ color: sr.color, style: sr.style, value: fmt(p[1]), label: sr.tipLabel, y: p[1] }); });
+      tipSeries.forEach((sr, k) => { if (!valid[k].has(xv)) return; const y = valid[k].get(xv); rows.push({ color: sr.color, style: sr.style, value: fmt(y), label: sr.tipLabel, y }); });
       rows.sort((a, b) => b.y - a.y);
       showTip(ev, (spec.tipTitle || ((x) => fmtTick(x)))(xv), rows);
     });
@@ -650,12 +644,13 @@ function styleFor(route, rule) {
 }
 const boxSample = (route) => glyph({ width: BOX_SAMPLE[route].width, hollow: BOX_SAMPLE[route].hollow, endMarker: true }, "currentColor");
 const islandSample = (rule) => { const cp = RULES[rule].cp; return glyph({ cp, markers: cp, connector: cp, dash: RULE_SAMPLE[rule].dash, shape: RULE_SAMPLE[rule].shape, width: 2 }, "currentColor"); };
-const timeStyle = (route, rule) => { const st = styleFor(route, rule); return Object.assign(st, { markers: st.cp, connector: st.cp }); };
+const timeStyle = (route, rule) => { const st = styleFor(route, rule); return Object.assign(st, { markers: st.cp, connector: st.cp, connectorWidth: st.width }); };   // a densest connector has its box's line weight
 const lateStyle = (route, rule) => { const st = styleFor(route, rule); return Object.assign(st, { markers: true, dash: st.cp ? "2 4" : st.dash }); };
 function renderAll() { ensureAlpha(); refreshStops(); renderRail(); renderCharts(); }
 function renderCharts() {
   const grid = state.view === "grid";
   $("charts").hidden = grid; $("gridview").hidden = !grid;
+  $("numbers-fold").hidden = grid;   // its table lists the late chart, which only the one-α view has
   if (grid) renderGrid(); else { renderTime(); renderLate(); }
 }
 
@@ -740,7 +735,8 @@ function timeSeriesFor(alpha, rules = activeRules()) {
       for (const e of entries) {
         const color = nColor(e.N);
         shownN.push(e.N);
-        const who = (two ? ROUTES[route].short + ", " : RULES[rule].short + " · ") + e.desc + " · N " + fmtN(e.N);
+        const seeds = st.cp ? (e.checkpoints && e.checkpoints.seeds) : e.late.seeds;   // every point of a curve is a mean over these seeds
+        const who = (two ? ROUTES[route].short + ", " : RULES[rule].short + " · ") + e.desc + " · N " + fmtN(e.N) + (seeds ? " · " + seeds + " seeds" : "");
         let points;
         if (st.cp) { const cp = e.checkpoints || { steps: [] }; points = cp.steps.map((t, i) => [t, t <= CUT && cp[key] ? cp[key][i] : null]); }
         else points = steps.map((t, i) => [t, t <= CUT && e.curves[key] ? e.curves[key][i] : null]);
@@ -750,7 +746,7 @@ function timeSeriesFor(alpha, rules = activeRules()) {
   }
   return { series, shownN };
 }
-/* one y range for every chart and setting: it holds every density drawn (1.6 to 2,263) and every seed range (to 3,940) */
+/* one y range for every chart and setting: it holds every density drawn (1.66 to 2,263) and every seed range (1.89 to 3,940) */
 const Y_RANGE = [1.5, 4000];
 function styleLegend(host, forLate) {
   host.replaceChildren();
@@ -824,7 +820,8 @@ function lateOf(e, route, rule) {
   const lt = cut ? e.late20000 : e.late;
   const a = lt && lt[key];
   if (!a || !isNum(a[0])) return null;
-  return { v: a[0], lo: a[1], hi: a[2], seeds: lt.seeds, cp: false, win: fmtStep(0.75 * lt.T) + "–" + fmtStep(lt.T) };
+  const w = lt.window || [0.75 * lt.T, lt.T];
+  return { v: a[0], lo: a[1], hi: a[2], seeds: lt.seeds, cp: false, win: fmtStep(w[0]) + "–" + fmtStep(w[1]) };
 }
 function lateSeriesFor(rules) {
   const routes = activeRoutes(), two = bothRoutes();
@@ -886,8 +883,8 @@ function renderDefs() {
   add(ROUTES.density.label, ROUTES.density.def);
   add(ROUTES.size.label, ROUTES.size.def + " L 90 at 2.4 per site is the 90 × 90 box at that density: both boxes share these runs, and the larger box has a fifth seed at α 0.85, 0.88, 0.92, 0.94 and 0.96.");
   add("Matched N", "pairs within a factor " + MATCH_RATIO + ": L 60 ↔ 1.2/site, L 90 ↔ 2.4 (shared runs), L 120 ↔ 4.8, L 180 ↔ 9.6 (same N), L 240 ↔ 14.4.");
-  add("Late value", "mean over the last quarter of the run, steps 15,100 to 20,000, in both boxes; densest: the saved lattice at step 20,000. Bars: smallest and largest seed value.");
-  add("Curves", "seed means at about 100 log-spaced steps (the runs sample every 25 steps to 5,000, then every 100). Step 0 is off the log axis. Colour = N, the total particle count, on one log scale for both boxes.");
+  add("Late value", "mean over the last quarter of the run, steps 15,100 to 20,000, in both boxes. The densest island is known only at the saved lattices, so its late value is the one lattice in that quarter, at step 20,000, until it is measured at every step. Bars: smallest and largest seed value.");
+  add("Curves", "seed means at 106 log-spaced steps up to 20,000, the same steps in both boxes (the runs sample every 25 steps to 5,000, then every 100). Step 0 is off the log axis. Colour = N, the total particle count, on one log scale for both boxes.");
   const st = (model.data.settings) || {};
   add("Settings", Object.entries(st).map(([k, v]) => k + ": " + v).join(" · ") + (model.data.generated ? " · data " + model.data.generated.replace("T", " ") : ""));
 }

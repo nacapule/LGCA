@@ -28,7 +28,7 @@
 // for lgca_error(); the other functions do nothing (or return 0) when no engine exists.
 // The build has no C++ exception catching, so a throw would end the module: the checks
 // make sure the engine is never asked to throw. lgca_create() also checks that the
-// memory for the lattices can be had before it builds the engine (see there).
+// memory for the engine can be had before it builds it (see there).
 //
 // Layouts, identical to the native program's state files and to the Lab's engine:
 //   lattice  int32, occ[(j*W + i)*6 + k] = particles at site (i, j) in channel k
@@ -56,22 +56,26 @@ const char* last_error = "";
 // 32-bit size_t of WebAssembly.
 constexpr double MAX_CELLS = 134217728.0;   // 2^27
 
-// Whether malloc can supply the engine's memory right now: the engine object and its two
-// lattices of `cells` int32 values. Allocates the same blocks, then frees them. With
+// Whether malloc can supply the engine's memory right now: the engine object, its table of
+// powers (lgca::POW_TABLE_SIZE doubles) and its two lattices of `cells` int32 values, in
+// the order the engine allocates them. Allocates the same blocks, then frees them. With
 // memory growth on, malloc returns null when the memory cannot grow (the browser refuses
 // it, or the 2 GiB ceiling is reached), whereas the engine's own allocations (operator new,
 // std::vector) would abort the module, as the build has no exception catching. A check,
 // not a guarantee: it cannot see another allocation that happens in between, but nothing
 // else runs in this module between the check and the engine's construction. The pointers
 // are volatile because the compiler may otherwise remove a malloc whose block is never
-// used, and with it the check.
+// used, and with it the check. After construction the engine allocates nothing more:
+// stepping and option changes (lgca_set_options) reuse these blocks.
 bool memory_available(std::size_t cells) {
     void* volatile object = std::malloc(sizeof(lgca::Lgca));
+    void* volatile powers = std::malloc(lgca::POW_TABLE_SIZE * sizeof(double));
     void* volatile occ = std::malloc(cells * sizeof(int32_t));
     void* volatile src = std::malloc(cells * sizeof(int32_t));
-    const bool ok = object && occ && src;
+    const bool ok = object && powers && occ && src;
     std::free(src);
     std::free(occ);
+    std::free(powers);
     std::free(object);
     return ok;
 }

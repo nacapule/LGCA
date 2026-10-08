@@ -13,12 +13,17 @@ steps 100, 500, 1000, 2000, 5000, 10000 and 20000, and in the larger boxes also 
 - densest: the island with the most particles per site;
 - densest2: the densest island of at least two sites.
 
+An empty lattice has no island: island, heaviest and densest are then [0, 0] (as in the
+trace) and densest2 is null.
+
 The 90 x 90 lattices are those of the September sweep (../density-alpha-sweep-2026-09-30/data),
-or density/<job>/ for the jobs that sweep did not run to step 20,000. Each lattice's
-busiest-site island, heaviest mass, island count and N are compared with the trace row at
-the same step; any difference stops the script.
+or density/<job>/ for the jobs that sweep did not run to step 20,000. Each lattice must have
+the SHA-256 that the trace recorded for that checkpoint, and its busiest-site island,
+heaviest mass, island count and N must equal the trace row at the same step; any difference
+stops the script.
 """
 import gzip
+import hashlib
 import json
 import multiprocessing
 import re
@@ -61,9 +66,22 @@ def islands(n, L):
     return parent, occupied
 
 
-def measure(path, L):
-    occ = np.frombuffer(gzip.decompress(path.read_bytes()), dtype="<i4").reshape(L * L, 6)
+def read_lattice(path, L, sha256=None):
+    """The particles of each channel of a saved lattice, (L*L, 6). With `sha256`, the
+    lattice bytes must have that hash (the one the trace recorded for this checkpoint)."""
+    raw = gzip.decompress(path.read_bytes())
+    if sha256 is not None and hashlib.sha256(raw).hexdigest() != sha256:
+        raise ValueError(f"{path}: SHA-256 differs from the trace's checkpoint")
+    if len(raw) != L * L * 6 * 4:
+        raise ValueError(f"{path}: {len(raw)} bytes, not a {L} x {L} lattice")
+    return np.frombuffer(raw, dtype="<i4").reshape(L * L, 6)
+
+
+def measure(occ, L):
     n = occ.sum(1).astype(np.int64)
+    if not n.any():                           # no occupied site: no island
+        return {"N": 0, "components": 0, "island": [0, 0], "heaviest": [0, 0],
+                "densest": [0, 0], "densest2": None, "densestIsIsland": False}
     label, occupied = islands(n, L)
     roots, inverse = np.unique(label[occupied], return_inverse=True)
     mass = np.bincount(inverse, weights=n[occupied]).astype(np.int64)
@@ -95,6 +113,7 @@ def job(task):
     L = record["job"]["size"]
     col = {c: k for k, c in enumerate(record["columns"])}
     rows = {row[0]: row for row in record["rows"]}
+    sha = {s["t"]: s["sha256"] for s in record["snaps"]}
     out = {"route": route, "job": name, **{k: record["job"][k] for k in ("size", "alpha", "dens", "seed")},
            "steps": {}}
     problems = []
@@ -102,7 +121,14 @@ def job(task):
         t = int(STATE.search(path.name).group(1))
         if t == 0 or t > record["reached"]:
             continue
-        m = measure(path, L)
+        if t not in sha:
+            problems.append(f"{name} t={t}: the trace has no checkpoint at this step")
+            continue
+        try:
+            m = measure(read_lattice(path, L, sha[t]), L)
+        except ValueError as err:
+            problems.append(f"{name} t={t}: {err}")
+            continue
         row = rows.get(t)
         if row is None:
             problems.append(f"{name} t={t}: no trace row")
@@ -143,7 +169,8 @@ def main():
     checked = sum(len(r["steps"]) for r in results)
     path = STUDY / "heaviest.json"
     path.write_text(json.dumps({"runs": results}, separators=(",", ":")))
-    print(f"wrote {path}: {len(results)} runs, {checked} lattices, every one matching its trace")
+    print(f"wrote {path}: {len(results)} runs, {checked} lattices, every one matching its trace "
+          "(SHA-256 and island numbers)")
 
 
 if __name__ == "__main__":

@@ -54,9 +54,16 @@ def load(folder, horizon=None):
     return runs
 
 
-def density(mass, area):
-    """Particles per site; 0 where there are no sites (no island, or no old cluster)."""
+def density(mass, area, steps=None, what="island"):
+    """Particles per site; 0 where there are no sites and no particles (no island, or no old
+    cluster). An undefined (null) mass or area, or particles without sites or sites without
+    particles, stops."""
     mass, area = np.asarray(mass, float), np.asarray(area, float)
+    bad = ~(np.isfinite(mass) & np.isfinite(area)) | ((mass == 0) != (area == 0))
+    if bad.any():
+        k = np.flatnonzero(bad)[0]
+        at = f"step {steps[k]:g}" if steps is not None else f"sample {k}"
+        raise SystemExit(f"{what}: {mass.flat[k]:g} particles on {area.flat[k]:g} sites at {at}")
     return np.divide(mass, area, out=np.zeros_like(mass), where=area > 0)
 
 
@@ -66,12 +73,14 @@ def add_derived(run):
     run["N0"] = N
     run["sites"] = sites
     run["mean"] = N / sites
+    where = describe(run)
     with np.errstate(invalid="ignore", divide="ignore"):
-        run["rho"] = density(run["islandMass"], run["islandArea"])   # island density
+        run["rho"] = density(run["islandMass"], run["islandArea"], run["t"], f"{where}: new island")
         run["frac"] = run["islandMass"] / N                          # island's share of N
         run["ratio"] = run["rho"] / run["mean"]
-        run["rhoOld"] = density(run["clusterMass"], run["clusterArea"])
-        run["rhoDensest"] = density(run["densestMass"], run["densestArea"])
+        run["rhoOld"] = density(run["clusterMass"], run["clusterArea"], run["t"], f"{where}: old cluster")
+        run["rhoDensest"] = density(run["densestMass"], run["densestArea"], run["t"],
+                                    f"{where}: densest island")
         run["fracOld"] = run["clusterMass"] / N                      # old cluster's share
         run["occFrac"] = run["occupied"] / sites
         run["compsPerSite"] = run["components"] / sites
@@ -101,9 +110,14 @@ def describe(run):
     return f"L {run['size']} alpha {run['alpha']:g} dens {run['dens']:g} seed {run['seed']}"
 
 
+def sample_steps(end):
+    """The steps the runs sample up to step `end`: every 25 steps to step 5,000, then every 100."""
+    return np.array([t for t in range(0, int(end) + 1, 25) if t <= 5000 or t % 100 == 0], float)
+
+
 def check_group(runs, what):
     """Stop unless `runs` are at least MIN_SEEDS runs with distinct seeds, the same
-    horizon and the same sample steps, so that their means are seed means at equal times."""
+    horizon and every sample step up to it, so that their means are seed means at equal times."""
     seeds = [r["seed"] for r in runs]
     if len(set(seeds)) != len(seeds):
         raise SystemExit(f"{what}: a seed appears twice ({sorted(seeds)})")
@@ -112,11 +126,12 @@ def check_group(runs, what):
     if len({r["reached"] for r in runs}) != 1:
         raise SystemExit(f"{what}: the runs end at different steps "
                          f"({sorted({r['reached'] for r in runs})})")
-    t0 = runs[0]["t"]
-    for r in runs[1:]:
-        if not np.array_equal(r["t"], t0):
-            raise SystemExit(f"{what}: seed {r['seed']} is sampled at other steps than "
-                             f"seed {runs[0]['seed']}")
+    steps = sample_steps(runs[0]["reached"])
+    for r in runs:
+        if not np.array_equal(r["t"], steps):
+            diff = sorted(set(r["t"].tolist()) ^ set(steps.tolist()))
+            raise SystemExit(f"{what}: seed {r['seed']} does not have exactly the sample steps up to "
+                             f"step {r['reached']}" + (f" (step {diff[0]:g})" if diff else ""))
     return len(seeds)
 
 

@@ -153,9 +153,7 @@ piles thins out.
 
 Late island values average each run's samples at steps `0.75 T < t ≤ T`,
 then average those run means over the seeds. T is the last step of the
-runs; the larger-box runs also have late values at T = 20,000. The densest
-island is measured only on saved lattices, so its late value uses the
-lattice saved at step T.
+runs; the larger-box runs also have late values at T = 20,000.
 
 ### Island CSV columns
 
@@ -168,8 +166,8 @@ The island study's three CSV files use these columns.
 | `N` | Particle count of a saved lattice; in the averaged files, the seed mean rounded to a whole number |
 | `seed`, `seeds` | The run's random seed; the number of seeds in a mean |
 | `step` | Time step |
-| `old`, `new` | Seed-mean density, in particles per site, of the cluster (`old`) and of the busiest site's island (`new`). `old` is 0 when no site reaches the cluster cutoff. |
-| `island`, `steps` | Which late value (`old`, `new`, `densest`) and the steps it averages: first and last sample step, or the saved lattice used |
+| `old`, `new`, `densest` | Seed-mean density, in particles per site, of the cluster (`old`), the busiest site's island (`new`) and the densest island (`densest`). `old` is 0 when no site reaches the cluster cutoff. |
+| `island`, `steps` | Which late value (`old`, `new`, `densest`) and the steps it averages: first and last sample step |
 | `mean`, `seed_min`, `seed_max` | Late density: mean over seeds, and the smallest and largest seed value |
 | `islands` | Number of islands in the lattice |
 | `*_mass`, `*_sites` | Particles and sites of the busiest site's island (`new`), the heaviest, the densest, and `densest2`: the densest island of at least two sites, blank when there is none |

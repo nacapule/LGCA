@@ -25,7 +25,7 @@ of the same plot over each other.
 
 | Data | Contents |
 |---|---|
-| [Island density over time](results/islands-2026-10-06/island-density-vs-time.csv) | Seed means for each box, alpha and N: `old` is the cluster of the earlier study, `new` the island of the busiest site |
+| [Island density over time](results/islands-2026-10-06/island-density-vs-time.csv) | Seed means for each box, alpha and N: `old` is the cluster of the earlier study, `new` the island of the busiest site, `densest` the island with the most particles per site |
 | [Late island density](results/islands-2026-10-06/late-island-density.csv) | Late means for three choices of island, with seed ranges |
 | [Islands of the saved lattices](results/islands-2026-10-06/islands-at-saved-steps.csv) | Particles and sites of the busiest site's island, the heaviest island and the densest island in each saved lattice |
 

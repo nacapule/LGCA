@@ -10,9 +10,8 @@ Reads page-data.json (build/page_data.py) and heaviest.json (build/heaviest.py) 
   islands-at-saved-steps.csv   the islands of every saved lattice, one row per lattice
 
 Late values use one window for every island, the steps t with 3/4 T < t <= T for a run
-ending at step T. `steps` gives the samples used: for old and new the first and last sample
-step of the window (every sample between them counts), for densest the saved lattices in
-the window (only the one at step T, until the densest island is traced at every step).
+ending at step T. `steps` gives the first and last sample step of the window (every sample
+between them counts).
 An `old` density of 0 means that no site held enough particles to form the old cluster
 (at step 0 in the 90 x 90 boxes with 3.6 or more particles per site).
 """
@@ -59,24 +58,20 @@ def main():
     for route, e in entries:
         head = settings(route, e, data) + [e["late"]["seeds"]]
         for k, step in enumerate(data[route]["steps"]):
-            old, new = e["curves"]["rhoOld"][k], e["curves"]["rho"][k]
-            if old is not None or new is not None:
-                rows.append(head + [step, cell(old), cell(new)])
+            values = [e["curves"][key][k] for key in ("rhoOld", "rho", "rhoDensest")]
+            if any(v is not None for v in values):
+                rows.append(head + [step, *map(cell, values)])
     write("island-density-vs-time.csv",
-          ["box", "alpha", "side", "dens", "N", "seeds", "step", "old", "new"], rows)
+          ["box", "alpha", "side", "dens", "N", "seeds", "step", "old", "new", "densest"], rows)
 
     rows = []
     for route, e in entries:
         head = settings(route, e, data)
         # the larger-box runs go past step 20,000: their late values at 20,000 and at the end
         lates = [x for x in (e.get("late20000"), e["late"]) if x]
-        blocks = [x for x in (e.get("checkpoints20000"), e["checkpoints"]) if x]
-        for island, key in (("old", "rhoOld"), ("new", "rho")):
+        for island, key in (("old", "rhoOld"), ("new", "rho"), ("densest", "rhoDensest")):
             for late in lates:
                 rows.append(head + [island, window(late), late["seeds"], *map(cell, late[key])])
-        for block in blocks:
-            steps = "+".join(str(t) for t in block["lateSteps"])
-            rows.append(head + ["densest", steps, block["seeds"], *map(cell, block["late"]["rhoDensest"])])
     write("late-island-density.csv",
           ["box", "alpha", "side", "dens", "N", "island", "steps", "seeds", "mean",
            "seed_min", "seed_max"], rows)

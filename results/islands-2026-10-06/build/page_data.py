@@ -6,10 +6,8 @@ Seed means of the island density over time, on one grid of log-spaced sample ste
 by both boxes (so the two boxes are compared at the same steps), and late values: the mean
 over the last quarter of each run, with the smallest and largest seed value. The larger-box
 runs go on to step 80,000 (40,000 at L = 720); their late values are also given at step
-20,000, where the denser box ends. The densest island comes from heaviest.json
-(build/heaviest.py) and exists only at the saved lattices: its curve has a point at each
-saved step, and its late value is the mean over the saved lattices inside the late window
-(the one at the end of the run) until the densest island is traced at every step.
+20,000, where the denser box ends. At every saved lattice the trace's heaviest and densest
+islands must equal heaviest.json (build/heaviest.py); any difference stops the script.
 
 Every curve and late value is a mean over at least four seeds sampled at the same steps;
 anything else stops the script. Values are rounded to 4 significant digits; a curve is null
@@ -23,7 +21,7 @@ import numpy as np
 from islands import (BOX_DENS, DENSITY_DIR, DENSITY_L, SIZE_DIR, STUDY, check_group, describe,
                      group, in_late_window, late, load)
 
-CURVE_KEYS = ["rho", "rhoOld"]      # island density, old cluster density
+CURVE_KEYS = ["rho", "rhoOld", "rhoDensest"]    # new island, old cluster, densest island
 HEAVIEST = {}                       # (route, job name) -> {step: islands}, filled in main()
 # the saved lattices, and the ends of the runs (20,000 in the denser box; 40,000 at L = 720)
 SAVED_STEPS = [100, 500, 1000, 2000, 5000, 10000, 20000, 40000, 60000, 80000]
@@ -88,36 +86,36 @@ def late_summary(runs):
     return out
 
 
-def island_density(record):
-    """Particles per site of a [particles, sites] island record; 0 for no island."""
-    mass, sites = record
-    return mass / sites if sites else 0.0
-
-
-def densest_block(route, runs, horizon):
-    """The densest island at the saved lattices up to `horizon`: seed means of its density,
-    and `late` = [seed mean, min, max] over the saved lattices in the late window."""
-    saved_by_run = []
+def check_saved(route, runs):
+    """Stop unless heaviest.json has every run of the route and every saved lattice of each,
+    and the run's trace row at each of them has the heaviest island's sites and the densest
+    islands that heaviest.json found on that lattice."""
+    names = set()
     for r in runs:
         name = f"both-L{r['size']}-a{r['alpha']:g}-d{r['dens']:g}-seed{r['seed']}"
+        names.add(name)
         saved = HEAVIEST.get((route, name))
         if not saved:
             raise SystemExit(f"heaviest.json has no lattices for {name}: run build/heaviest.py")
-        saved_by_run.append(saved)
-    steps = sorted({int(t) for saved in saved_by_run for t in saved if int(t) <= horizon})
-    for r, saved in zip(runs, saved_by_run):    # every seed at every step, so no mean drops a seed
-        missing = [t for t in steps if saved.get(str(t)) is None]
-        if missing:
-            raise SystemExit(f"{route} {describe(r)}: no saved lattice at steps {missing}")
-    density = np.array([[island_density(saved[str(t)]["densest"]) for t in steps]
-                        for saved in saved_by_run])
-    late_steps = [t for t in steps if in_late_window(t, horizon)]
-    if not late_steps:
-        raise SystemExit(f"{route} {describe(runs[0])}: no saved lattice in the late window")
-    per_seed = density[:, [steps.index(t) for t in late_steps]].mean(axis=1)
-    return {"steps": steps, "seeds": len(runs), "rhoDensest": rounded(density.mean(axis=0)),
-            "late": {"rhoDensest": rounded([per_seed.mean(), per_seed.min(), per_seed.max()])},
-            "lateSteps": late_steps}
+        steps = sorted(int(t) for t in saved if int(t) <= r["reached"])
+        if steps != [t for t in SAVED_STEPS if t <= r["reached"]]:
+            raise SystemExit(f"{route} {describe(r)}: heaviest.json has the lattices of steps {steps}: "
+                             "run build/heaviest.py")
+        row = {int(t): k for k, t in enumerate(r["t"])}
+        for t in steps:
+            if t not in row:
+                raise SystemExit(f"{route} {describe(r)}: no trace row at saved step {t}")
+            m = saved[str(t)]
+            densest2 = m["densest2"] or [None, None]
+            expected = [m["heaviest"][1], *m["densest"], *densest2]
+            got = [r[c][row[t]] for c in ("largestArea", "densestMass", "densestArea",
+                                          "densest2Mass", "densest2Area")]
+            got = [None if np.isnan(v) else float(v) for v in got]
+            if got != expected:
+                raise SystemExit(f"{route} {describe(r)} step {t}: trace {got} != heaviest.json {expected}")
+    missing = sorted(job for rt, job in HEAVIEST if rt == route and job not in names)
+    if missing:
+        raise SystemExit(f"{route}: {len(missing)} runs of heaviest.json have no trace, such as {missing[0]}")
 
 
 def cut(runs, horizon):
@@ -134,6 +132,7 @@ def cut(runs, horizon):
 
 def size_route(steps):
     runs = load(SIZE_DIR)
+    check_saved("size", runs)
     entries = []
     for alpha in sorted({r["alpha"] for r in runs}):
         for L in sorted({r["size"] for r in runs}):
@@ -148,14 +147,13 @@ def size_route(steps):
                 "curves": {key: curve(g, key, steps) for key in CURVE_KEYS},
                 "late": late_summary(g),
                 "late20000": late_summary(cut(g, 20000)) if at20000 else None,
-                "checkpoints": densest_block("size", g, horizon),
-                "checkpoints20000": densest_block("size", g, 20000) if at20000 else None,
             })
     return {"steps": steps, "density": BOX_DENS, "entries": entries}
 
 
 def density_route(steps):
     runs = load(DENSITY_DIR, 20000)
+    check_saved("density", runs)
     entries = []
     for alpha in sorted({r["alpha"] for r in runs}):
         for dens in sorted({r["dens"] for r in runs}):
@@ -167,7 +165,6 @@ def density_route(steps):
                     "N": int(round(np.mean([r["N0"] for r in g]))),
                     "curves": {key: curve(g, key, steps) for key in CURVE_KEYS},
                     "late": late_summary(g),
-                    "checkpoints": densest_block("density", g, 20000),
                 })
     return {"steps": steps, "L": DENSITY_L, "entries": entries}
 

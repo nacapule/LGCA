@@ -1642,8 +1642,8 @@ async function verifyPage(glue) {
      async page => {
        await page.settle(() => page.lab.sim.engine !== "" && page.lab.sim.frameT >= 1, "the first frame");
        const {lab} = page, t = lab.sim.t;
-       let refuse = null;
-       page.navigator.clipboard.writeText = () => new Promise((resolve, reject) => { refuse = reject; });
+       let refuse = null, offered = null;
+       page.navigator.clipboard.writeText = text => new Promise((resolve, reject) => { offered = text; refuse = reject; });
        page.$("bCsv").click();
        page.$("inSize").value = "60"; page.$("inSeed").value = "777"; lab.reset();
        await page.settle(() => lab.sim.W === 60 && lab.sim.engine !== "", "the 60 x 60 run");
@@ -1652,8 +1652,10 @@ async function verifyPage(glue) {
        const csv = page.created.find(e => e.localName === "a" && String(e.download).endsWith(".csv"));
        assert(csv, "no CSV file was saved");
        assert.equal(csv.download, `lgca-boson-120x120-d0.4-seed12345-t${t}.csv`);
+       assert.equal(await resolveObjectURL(csv.href).text(), offered, "the saved CSV is not the data offered to the clipboard");
      },
-     ["    a.download=name;", "    a.download=`lgca-${sim.model}-${sim.W}x${sim.H}-d${sim.dens}-seed${sim.seed}-t${sim.t}.csv`;"]],
+     [["    a.download=name;", "    a.download=`lgca-${sim.model}-${sim.W}x${sim.H}-d${sim.dens}-seed${sim.seed}-t${sim.t}.csv`;"],
+      ['new Blob([out],{type:"text/csv"})', 'new Blob([historyCsv()],{type:"text/csv"})']]],
     ["guides follow the periodic copies across the edge", {},
      async page => {
        await page.settle(() => page.lab.sim.engine !== "", "the init reply");
@@ -1885,13 +1887,14 @@ async function verifyPage(glue) {
     const attempt = m => onPage(glue, {...options, mutate:m}, check);
     const problem = await attempt(null);
     assert.equal(problem, null, `the page: ${what}: ${problem}`);
-    if (mutate) assert.notEqual(await attempt(mutate), null, `the page without the fix passes: ${what}`);
+    for (const m of mutate ? (Array.isArray(mutate[0]) ? mutate : [mutate]) : [])
+      assert.notEqual(await attempt(m), null, `the page without the fix passes: ${what}`);
   }
   results.push(`PASS the page: ${small.length} checks of controls and displays (speed label, typed sensitivity and α, ` +
     "band when off, boson density limit, card preferences, recipe storage and import, presets, the site inspector, " +
     "wrapped counts and guides, overlay centres, chart sharpness and redraws, field-view rebuilds, the history-limit label, an " +
     "engine failure on the main thread, study links, other-fields defaults, snapshot names, the inspector after colour and view " +
-    "changes, the CSV file name after a late clipboard refusal); each fix's absence fails its check");
+    "changes, the CSV file name and data after a late clipboard refusal); each fix's absence fails its check");
 
   // (e) The study link's defaults.
   {

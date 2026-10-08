@@ -119,13 +119,13 @@ def export_main_sweep(runs):
             curves[curve_column(alpha, dens)] = np.mean(
                 [run["clusterDensity"] for run in group], axis=0)
 
-    write_csv(SUMMARY_CSV, list(summary_rows[0]), summary_rows)
     time_rows = []
     for i, t in enumerate(times):
         row = {"t": int(t)}
         row.update({name: f"{values[i]:.6g}" for name, values in curves.items()})
         time_rows.append(row)
-    write_csv(TIME_CSV, ["t", *curves], time_rows)
+    return [(SUMMARY_CSV, list(summary_rows[0]), summary_rows),
+            (TIME_CSV, ["t", *curves], time_rows)]
 
 
 def export_box_sizes(runs):
@@ -150,7 +150,7 @@ def export_box_sizes(runs):
                 "seed_min": round(float(min(late)), 2),
                 "seed_max": round(float(max(late)), 2),
             })
-    write_csv(BOX_CSV, list(rows[0]), rows)
+    return [(BOX_CSV, list(rows[0]), rows)]
 
 
 def number_label(value, _position=None):
@@ -329,6 +329,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.data:
         finished = load_finished_runs(args.data)
-        export_main_sweep(finished)
-        export_box_sizes(finished)
+        # all three exports are made and checked before any file is replaced
+        exports = export_main_sweep(finished) + export_box_sizes(finished)
+        for path, fields, rows in exports:
+            write_csv(path, fields, rows)
     draw_figures()

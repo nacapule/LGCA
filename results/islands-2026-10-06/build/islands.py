@@ -1,7 +1,8 @@
 """Read the island traces of this study.
 
 Each run's trace.json has one row per sample step: N, the island's mass and number of
-sites, the old cluster's mass and area, and other columns.
+sites, the old cluster's mass and area, the densest island's mass and number of sites, and
+other columns.
 
 Densities: an island or cluster with no sites has density 0. The old cluster has no sites
 when no site holds max(1, ceil(2N/A)) particles: at step 0 in the 90 x 90 boxes with 3.6 or
@@ -21,8 +22,8 @@ DENSITY_DIR = STUDY / "density"    # more particles from a denser 90 x 90 box
 BOX_DENS = 0.4                     # per channel: 2.4 particles per site
 DENSITY_L = 90
 
-# Late values: the samples (or saved lattices) at steps t with LATE_FRACTION * T < t <= T,
-# where T is the end of the run. The same window for every island.
+# Late values: the samples at steps t with LATE_FRACTION * T < t <= T, where T is the end
+# of the run. The same window for every island.
 LATE_FRACTION = 0.75
 # Every averaged curve and late value needs at least this many distinct seeds.
 MIN_SEEDS = 4
@@ -70,6 +71,7 @@ def add_derived(run):
         run["frac"] = run["islandMass"] / N                          # island's share of N
         run["ratio"] = run["rho"] / run["mean"]
         run["rhoOld"] = density(run["clusterMass"], run["clusterArea"])
+        run["rhoDensest"] = density(run["densestMass"], run["densestArea"])
         run["fracOld"] = run["clusterMass"] / N                      # old cluster's share
         run["occFrac"] = run["occupied"] / sites
         run["compsPerSite"] = run["components"] / sites

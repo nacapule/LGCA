@@ -2,11 +2,9 @@
 
     python3 build/heaviest.py
 
-The traces give the busiest site's island at every sample step, and the heaviest island's
-mass, but not the heaviest or the densest island's sites. The runs saved their lattices at
-steps 100, 500, 1000, 2000, 5000, 10000 and 20000, and in the larger boxes also at 40000,
-60000 and 80000 as far as each run goes. This script finds every island of each saved lattice and records, as
-[particles, sites]:
+The runs saved their lattices at steps 100, 500, 1000, 2000, 5000, 10000 and 20000, and in
+the larger boxes also at 40000, 60000 and 80000 as far as each run goes. This script finds
+every island of each saved lattice and records, as [particles, sites]:
 
 - island: the busiest site's island, the same island as the trace's;
 - heaviest: the island with the most particles;

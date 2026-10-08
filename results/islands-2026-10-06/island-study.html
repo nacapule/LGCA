@@ -598,7 +598,7 @@ const state = {
   routes: new Set(["size"]),                  // boxes shown, at least one; at load the "Both changes" preset
   rules: new Set(["busiest"]),                // islands shown, at least one
   alpha: 0.9,
-  matched: false,                             // only the N present in both boxes
+  matched: false,                             // only the N present in both boxes; presets leave it alone
   commonAlpha: true,                          // only the α run in both boxes; on at load; presets leave it alone
   view: "grid",                               // "charts" (one α) or "grid" (every α)
 };
@@ -606,18 +606,18 @@ let model = null;
 /* a preset sets the boxes and islands; every control works as usual afterwards */
 const PRESETS = [
   { id: "sep30", label: "Sep 30 plot", tip: "Old island, denser 90 × 90 box: the Sep 30 figure. The finer α now have four seeds instead of three.",
-    routes: ["density"], rules: ["old"], matched: false },
+    routes: ["density"], rules: ["old"] },
   { id: "rule", label: "Island change", tip: "Same box, different islands: the denser 90 × 90 box with the old, new and densest islands laid over each other.",
-    routes: ["density"], rules: ["old", "busiest", "densest"], matched: false },
+    routes: ["density"], rules: ["old", "busiest", "densest"] },
   { id: "route", label: "Count change", tip: "Same island, different way of adding particles: both boxes with the old island.",
-    routes: ["density", "size"], rules: ["old"], matched: false },
+    routes: ["density", "size"], rules: ["old"] },
   { id: "both", label: "Both changes", tip: "Larger box, new island: both changes together.",
-    routes: ["size"], rules: ["busiest"], matched: false },
+    routes: ["size"], rules: ["busiest"] },
 ];
 const sameSet = (set, arr) => set.size === arr.length && arr.every((x) => set.has(x));
-/* a preset shows as on while the boxes, islands and matched N match it */
-const presetOn = (p) => sameSet(state.routes, p.routes) && sameSet(state.rules, p.rules) && state.matched === p.matched;
-function applyPreset(id) { const p = PRESETS.find((x) => x.id === id); if (p) { state.routes = new Set(p.routes); state.rules = new Set(p.rules); state.matched = p.matched; renderAll(); } }
+/* a preset shows as on while the boxes and islands match it */
+const presetOn = (p) => sameSet(state.routes, p.routes) && sameSet(state.rules, p.rules);
+function applyPreset(id) { const p = PRESETS.find((x) => x.id === id); if (p) { state.routes = new Set(p.routes); state.rules = new Set(p.rules); renderAll(); } }
 /* one island: the boxes share a chart; one box: the islands do; both boxes and several islands: one panel per island */
 const activeRoutes = () => ROUTE_ORDER.filter((r) => state.routes.has(r));
 const activeRules = () => RULE_ORDER.filter((r) => state.rules.has(r));
@@ -687,7 +687,7 @@ function renderRail() {
   const opts = $("route-opts"); opts.replaceChildren();
   {
     const both = bothRoutes();
-    const cb = h("input", { type: "checkbox", id: "opt-matched", disabled: both ? null : true }); cb.checked = both && state.matched;
+    const cb = h("input", { type: "checkbox", id: "opt-matched", disabled: both ? null : true }); cb.checked = state.matched;   // kept, greyed, with one box
     cb.addEventListener("change", () => { state.matched = cb.checked; renderAll(); });
     opts.append(h("label", { class: "check" + (both ? "" : " off"), for: "opt-matched", "data-tip": "Only the N present in both boxes (within a factor 1.25): L 60 ↔ 1.2/site, L 90 ↔ 2.4 (shared runs), L 120 ↔ 4.8, L 180 ↔ 9.6 (same N), L 240 ↔ 14.4. Needs both boxes." }, cb, "matched N"));
   }

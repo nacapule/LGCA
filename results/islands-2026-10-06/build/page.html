@@ -230,7 +230,7 @@ details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
 <div class="pop" id="pop" hidden role="tooltip"></div>
 
 <!-- the notes at the bottom of the page: [{"title": ..., "text": ...}, ...] -->
-<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over the end of the runs (steps 60,100 to 80,000; the densest island at the lattices of steps 60,000 and 80,000), the new island's density grows 6.6 to 78 times, the old cluster's 4.9 to 37 times and the densest island's 7.8 to 92 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. These windows are past the end of the charts; the values are in the data files."}, {"title": "At α ≤ 0.8 the density levels off, higher in bigger boxes.", "text": "Between steps 40,000–60,000 and 60,000–80,000 it changes by less than 1% at α ≤ 0.5 and by 1 to 8% at α 0.8. At α ≤ 0.5 the busiest site stays the same from step 5,000 to 80,000 in 59 of 62 runs."}, {"title": "α 0.85 to 0.94 has not settled by step 80,000.", "text": "In the larger boxes the island density still changes by −16% to +56% between the same two windows."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 1.0 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved at step 5,000 and later, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 90% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are trends at finite times and box sizes. The densest island is known only at the saved lattices."}]</script>
+<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over the end of the runs (steps 60,100 to 80,000; the densest island at the lattices of steps 60,000 and 80,000), the new island's density grows 6.4 to 68 times, the old cluster's 5.0 to 41 times and the densest island's 8.0 to 82 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. These windows are past the end of the charts; the values are in the data files."}, {"title": "At α ≤ 0.8 the density levels off, higher in bigger boxes.", "text": "Between steps 40,000–60,000 and 60,000–80,000 it changes by less than 1% at α ≤ 0.5 and by up to 8% at α 0.8. At α ≤ 0.5 the busiest site stays the same from step 5,000 to 80,000 in 63 of 66 runs."}, {"title": "α 0.85 to 0.94 has not settled by step 80,000.", "text": "In the larger boxes the island density still changes by −26% to +44% between the same two windows."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 1.0 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved at step 5,000 and later, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 90% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are trends at finite times and box sizes. The densest island is known only at the saved lattices."}]</script>
 <script id="page-data" type="application/json"></script>
 
 <script>
@@ -244,7 +244,7 @@ const ROUTES = {
   density: { label: "Denser 90 × 90 box", chip: "Denser 90×90", short: "denser box",
              def: "90 × 90 box, 0.15 to 14.4 particles per site (N = 1.2k to 117k), to step 20,000; 25 α; 4 to 5 seeds." },
   size:    { label: "Larger box, 2.4 per site", chip: "Larger box", short: "larger box",
-             def: "2.4 particles per site, side L = 60 to 480 (N = 8.6k to 553k); L = 720 (1.24M) at α = 0.8, 0.9, 0.94, 1; shown to step 20,000; 10 α; 5 seeds to L 240, 3 above, 2 at L 720." },
+             def: "2.4 particles per site, side L = 60 to 480 (N = 8.6k to 553k); L = 720 (1.24M) at α = 0.8, 0.9, 0.94, 1; shown to step 20,000; 10 α; 5 seeds to L 240, 4 above." },
 };
 const ROUTE_ORDER = ["density", "size"];
 const DRAW_ORDER = ["size", "density"];           // the denser box on top
@@ -750,7 +750,7 @@ function timeSeriesFor(alpha, rules = activeRules()) {
   }
   return { series, shownN };
 }
-/* one y range for every chart and setting: it holds every density drawn (1.6 to 2,409) and every seed range (to 3,940) */
+/* one y range for every chart and setting: it holds every density drawn (1.6 to 2,263) and every seed range (to 3,940) */
 const Y_RANGE = [1.5, 4000];
 function styleLegend(host, forLate) {
   host.replaceChildren();

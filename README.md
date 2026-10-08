@@ -55,9 +55,9 @@ The figures cover runs through 20,000 steps, averaged across several seeds.
 
 | Document | Contents |
 |---|---|
-| [Model and observables](docs/PHYSICS.md) | Collision rules, field settings, alpha, measurement and island definitions |
+| [Model and observables](docs/PHYSICS.md) | Collision rules, field settings, alpha, measurement and island definitions, island CSV columns |
 | [Lab C++ source](native/README.md) | Simulation source and instructions for rebuilding after code changes |
-| [Reference C++](lgca/lgca_clean-1.cpp) | The original model implementation |
+| [Reference C++](lgca/lgca_clean-1.cpp) | The reference model implementation |
 | [Earlier C++ variant](lgca/lgca_noib.cpp) | Neighbour fields, polar bosons and normalization |
 | [Original repository](https://github.com/tailswalker/LGCA) | tailswalker/LGCA, which this repository is forked from |
 

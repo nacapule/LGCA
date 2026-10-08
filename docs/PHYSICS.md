@@ -76,20 +76,35 @@ normalization. Its rules differ from the reference defaults.
 
 ## Measurements in the Lab
 
+Here `n_xk` is the number of particles at site x in channel k,
+`n_x = Σ_k n_xk`, `n_k = Σ_x n_xk`, and `θ_k = kπ/3` is channel k's angle.
+
 | Observable | Definition |
 |---|---|
-| Polar | `|Σ n_k c_k| / N`. Close to 1 when particles share a direction. |
-| Nematic | `|Σ n_k (cos 2θ_k, sin 2θ_k)| / N`. Close to 1 when particles share an axis, including opposite directions. |
+| Polar | `\|Σ n_k c_k\| / N`. Close to 1 when particles share a direction. |
+| Nematic | `\|Σ n_k (cos 2θ_k, sin 2θ_k)\| / N`. Close to 1 when particles share an axis, including opposite directions. |
 | Spatial | `1 − S / ln(W×H)`, with `S = −Σ p_x ln p_x` and `p_x = n_x/N`. Zero for an even spread; one for all particles at one site. |
-| Band | Measures whether surrounding mass lies along an axis. It samples distances 1–4 along six axial directions around each occupied site. |
+| Band | Whether the mass around each occupied site lies along an axis, weighted by the site's population (below) |
+
+For each occupied site x, the band samples the sites `y = x + r·e_d` at
+distances r = 1…4 along each of the six lattice directions d (24 sites),
+where `e_d` is the hop of channel d:
+
+```text
+v_x = Σ_{r,d} n_y (cos 2θ_d, sin 2θ_d)
+m_x = Σ_{r,d} n_y
+b_x = |v_x| / m_x        (0 when m_x = 0)
+Band = Σ_x n_x b_x / N
+```
+
+Doubling the angle makes opposite directions count as the same axis. On a
+small periodic lattice two offsets can reach the same site; each is counted.
 
 Band counts **all six channels**. The reference omits channel 0.
 Older band values use that earlier definition; the change affects only
 this measurement.
 
 ## Measurements in the study
-
-Let `n_x = Σ_k n_xk` be the population of site x.
 
 A site belongs to the cluster search if
 `n_x ≥ max(1, ceil(2 × rho))`. Adjacent qualifying sites form a component,
@@ -106,10 +121,10 @@ with the greatest particle mass.
 N_c is different from the total population of the most occupied site and
 from the mass or density of a connected cluster.
 
-The published late values average steps 15,100–20,000 within each run,
-then average those run means across seeds. Ranges show the smallest and
-largest seed means. A flat part of a finite curve is not enough to establish
-a limiting density.
+In the density and alpha study, late values average steps 15,100–20,000
+within each run, then average those run means across seeds. Ranges show
+the smallest and largest seed means. A flat part of a finite curve is not
+enough to establish a limiting density.
 
 ## Islands
 
@@ -135,3 +150,26 @@ occupied, more than the site-percolation threshold of the six-neighbour
 lattice, which is 1/2. In the study's runs all of these sites form one
 island at step 0. The busiest site's island separates once the gas between
 piles thins out.
+
+Late island values average each run's samples at steps `0.75 T < t ≤ T`,
+then average those run means over the seeds. T is the last step of the
+runs; the larger-box runs also have late values at T = 20,000. The densest
+island is measured only on saved lattices, so its late value uses the
+lattice saved at step T.
+
+### Island CSV columns
+
+The island study's three CSV files use these columns.
+
+| Column | Meaning |
+|---|---|
+| `box` | `denser`: 90 × 90 box, N set by `dens`. `larger`: `dens` 0.4, N set by the box side |
+| `alpha`, `side`, `dens` | Alpha, box side L (L × L sites), starting `dens` per channel |
+| `N` | Particle count of a saved lattice; in the averaged files, the seed mean rounded to a whole number |
+| `seed`, `seeds` | The run's random seed; the number of seeds in a mean |
+| `step` | Time step |
+| `old`, `new` | Seed-mean density, in particles per site, of the cluster (`old`) and of the busiest site's island (`new`). `old` is 0 when no site reaches the cluster cutoff. |
+| `island`, `steps` | Which late value (`old`, `new`, `densest`) and the steps it averages: first and last sample step, or the saved lattice used |
+| `mean`, `seed_min`, `seed_max` | Late density: mean over seeds, and the smallest and largest seed value |
+| `islands` | Number of islands in the lattice |
+| `*_mass`, `*_sites` | Particles and sites of the busiest site's island (`new`), the heaviest, the densest, and `densest2`: the densest island of at least two sites, blank when there is none |

@@ -27,7 +27,7 @@ the source files.
 | Check | Comparison |
 |---|---|
 | Ten fermion and boson cases | Every lattice channel and all 33 generator words against the reference |
-| Printed measurements | Error no greater than `5e-14 × max(1, |reference value|)` |
+| Printed measurements | Error no greater than `5e-14 × max(1, \|reference value\|)` |
 | Replay | Restoring the lattice and generator reproduces the same continuation |
 | Research settings | Step-by-step agreement with an independent implementation across 60 combinations |
 | Buffered measurements and rewinds | Worker replies agree with fresh runs from the seed |

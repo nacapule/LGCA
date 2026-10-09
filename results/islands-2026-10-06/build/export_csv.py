@@ -4,14 +4,14 @@
 
 Reads page-data.json (build/page_data.py) and heaviest.json (build/heaviest.py) and writes:
 
-  island-density-vs-time.csv   seed-mean island density at each sampled step up to step
-                               80,000 (the same steps in both boxes)
+  island-density-vs-time.csv   seed-mean island density at each sampled step, to the end
+                               of the longest larger-box run (same steps in both boxes)
   late-island-density.csv      late island density, with the smallest and largest seed value
   islands-at-saved-steps.csv   the islands of every saved lattice, one row per lattice
 
 Late values use one window for every island, the steps t with 3/4 T < t <= T for runs
 ending at step T, or cut there: the larger-box runs also at T = 20,000, and those that go on
-to 160,000 also at T = 80,000. `steps` gives the first and last sample step of the window
+to 160,000 also at T = 80,000, and those that go on to 320,000 also at T = 160,000. `steps` gives the first and last sample step of the window
 (every sample between them counts).
 An `old` density of 0 means that no site held enough particles to form the old cluster
 (at step 0 in the 90 x 90 boxes with 3.6 or more particles per site).
@@ -67,8 +67,8 @@ def main():
     for route, e in entries:
         head = settings(route, e, data)
         # the larger-box runs go past step 20,000: their late values at 20,000, at 80,000 for
-        # the runs that go on to 160,000, and at the end
-        lates = [x for x in (e.get("late20000"), e.get("late80000"), e["late"]) if x]
+        # the runs that go on to 160,000, at 160,000 for those to 320,000, and at the end
+        lates = [x for x in (e.get("late20000"), e.get("late80000"), e.get("late160000"), e["late"]) if x]
         for island, key in (("old", "rhoOld"), ("new", "rho"), ("densest", "rhoDensest")):
             for late in lates:
                 late_rows.append(head + [island, window(late), late["seeds"], *map(cell, late[key])])

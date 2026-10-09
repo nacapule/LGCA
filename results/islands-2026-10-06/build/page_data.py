@@ -5,10 +5,11 @@
 Seed means of the island density over time, on one grid of log-spaced sample steps shared
 by both boxes (so the two boxes are compared at the same steps), and late values: the mean
 over the last quarter of each run, with the smallest and largest seed value. The larger-box
-runs go on to step 80,000, and at alpha 0.85 to 0.94 to 160,000. Their late values are also
-given at step 20,000, where the denser box ends, and those of the runs to 160,000 also at
-step 80,000; the grid stops at step 80,000. At every saved lattice the trace's heaviest and
-densest islands must equal heaviest.json (build/heaviest.py); any difference stops the script.
+runs go on to step 80,000, at alpha 0.85 to 0.94 to 160,000, and at alpha 0.9 and 0.92
+to 320,000. Their late values are also given at step 20,000, where the denser box ends,
+and at every earlier larger-box horizon (80,000 and 160,000); the grid continues to the longest larger-box run. At every saved lattice the
+trace's heaviest and densest islands must equal heaviest.json (build/heaviest.py); any
+difference stops the script.
 
 Every curve and late value is a mean over at least four seeds sampled at the same steps;
 anything else stops the script. Values are rounded to 4 significant digits; a curve is null
@@ -24,8 +25,8 @@ from islands import (BOX_DENS, DENSITY_DIR, DENSITY_L, SIZE_DIR, STUDY, check_gr
 
 CURVE_KEYS = ["rho", "rhoOld", "rhoDensest"]    # new island, old cluster, densest island
 HEAVIEST = {}                       # (route, job name) -> {step: islands}, filled in main()
-LAST_STEP = 80000                   # the grid ends here, also for the runs that go on to 160,000
-GRID_POINTS = 180                   # log-spaced points from step 25 to LAST_STEP
+LAST_STEP = None                    # largest reached step of the larger-box runs, set in main()
+GRID_POINTS = 180                   # the original log-spaced grid from step 25 to 80,000
 
 
 def saved_steps(end):
@@ -34,16 +35,19 @@ def saved_steps(end):
     return [t for t in [100, 500, 1000, 2000, 5000, 10000, *range(20000, end + 1, 20000)] if t <= end]
 
 
-def sample_grid():
-    """The sample steps the page and the CSV use, the same for every run: step 0, the saved
-    steps up to LAST_STEP, and GRID_POINTS log-spaced steps from 25 to LAST_STEP, each rounded
-    to a step the runs sample (every 25 steps to 5,000, then every 100). Up to step 20,000
-    this keeps 106 steps, and 139 up to LAST_STEP."""
-    steps = {0, *saved_steps(LAST_STEP)}
-    for t in np.geomspace(25, LAST_STEP, GRID_POINTS):
+def sample_grid(end):
+    """Keep the original 139 steps to 80,000. Above it, add 16 log-spaced steps per
+    doubling, rounded to 100, and every saved step, up to the longest run."""
+    steps = {0, end, *saved_steps(end)}
+    for t in np.geomspace(25, 80000, GRID_POINTS):
         spacing = 25 if t <= 5000 else 100
         steps.add(int(round(t / spacing)) * spacing)
-    return sorted(steps)
+    start = 80000
+    while start < end:
+        for t in np.geomspace(start, 2 * start, 17)[1:]:
+            steps.add(int(round(t / 100)) * 100)
+        start *= 2
+    return sorted(s for s in steps if s <= end)
 
 
 def rounded(values):
@@ -135,8 +139,7 @@ def cut(runs, horizon):
     return out
 
 
-def size_route(steps):
-    runs = load(SIZE_DIR)
+def size_route(steps, runs):
     check_saved("size", runs)
     entries = []
     for alpha in sorted({r["alpha"] for r in runs}):
@@ -155,6 +158,8 @@ def size_route(steps):
             }
             if horizon > 80000:          # the runs to 160,000 also at 80,000, where the others end
                 entry["late80000"] = late_summary(cut(g, 80000))
+            if horizon > 160000:         # keep the earlier last quarter before extending again
+                entry["late160000"] = late_summary(cut(g, 160000))
             entries.append(entry)
     return {"steps": steps, "density": BOX_DENS, "entries": entries}
 
@@ -178,15 +183,18 @@ def density_route(steps):
 
 
 def main():
+    global LAST_STEP
+    runs = load(SIZE_DIR)
+    LAST_STEP = max(r["reached"] for r in runs)
     for run in json.loads((STUDY / "heaviest.json").read_text())["runs"]:
         HEAVIEST[(run["route"], run["job"])] = run["steps"]
-    grid = sample_grid()
+    grid = sample_grid(LAST_STEP)
     data = {
         "generated": datetime.now().isoformat(timespec="minutes"),
         "settings": {"model": "boson", "alignment": "polar", "kernel": "power (divide by M^alpha)",
                      "field": "centre + 6 neighbours", "sensitivity": 6,
                      "boundaries": "periodic", "lattice": "hexagonal, 6 velocity channels"},
-        "size": size_route(grid),
+        "size": size_route(grid, runs),
         "density": density_route([s for s in grid if s <= 20000]),
     }
     path = STUDY / "page-data.json"

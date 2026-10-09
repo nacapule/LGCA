@@ -5,9 +5,10 @@
 Seed means of the island density over time, on one grid of log-spaced sample steps shared
 by both boxes (so the two boxes are compared at the same steps), and late values: the mean
 over the last quarter of each run, with the smallest and largest seed value. The larger-box
-runs go on to step 80,000 (40,000 at L = 720); their late values are also given at step
-20,000, where the denser box ends. At every saved lattice the trace's heaviest and densest
-islands must equal heaviest.json (build/heaviest.py); any difference stops the script.
+runs go on to step 80,000, and at alpha 0.85 to 0.94 to 160,000. Their late values are also
+given at step 20,000, where the denser box ends, and those of the runs to 160,000 also at
+step 80,000; the grid stops at step 80,000. At every saved lattice the trace's heaviest and
+densest islands must equal heaviest.json (build/heaviest.py); any difference stops the script.
 
 Every curve and late value is a mean over at least four seeds sampled at the same steps;
 anything else stops the script. Values are rounded to 4 significant digits; a curve is null
@@ -23,18 +24,22 @@ from islands import (BOX_DENS, DENSITY_DIR, DENSITY_L, SIZE_DIR, STUDY, check_gr
 
 CURVE_KEYS = ["rho", "rhoOld", "rhoDensest"]    # new island, old cluster, densest island
 HEAVIEST = {}                       # (route, job name) -> {step: islands}, filled in main()
-# the saved lattices, and the ends of the runs (20,000 in the denser box; 40,000 at L = 720)
-SAVED_STEPS = [100, 500, 1000, 2000, 5000, 10000, 20000, 40000, 60000, 80000]
-LAST_STEP = 80000
+LAST_STEP = 80000                   # the grid ends here, also for the runs that go on to 160,000
 GRID_POINTS = 180                   # log-spaced points from step 25 to LAST_STEP
+
+
+def saved_steps(end):
+    """The steps at which the runs saved their lattice, up to step `end`: 100, 500, 1,000,
+    2,000, 5,000, 10,000, then every 20,000 (the ends of the runs are among them)."""
+    return [t for t in [100, 500, 1000, 2000, 5000, 10000, *range(20000, end + 1, 20000)] if t <= end]
 
 
 def sample_grid():
     """The sample steps the page and the CSV use, the same for every run: step 0, the saved
-    steps (which include every run's end), and GRID_POINTS log-spaced steps from 25 to
-    LAST_STEP, each rounded to a step the runs sample (every 25 steps to 5,000, then every
-    100). Up to step 20,000 this keeps 106 steps."""
-    steps = {0, *SAVED_STEPS}
+    steps up to LAST_STEP, and GRID_POINTS log-spaced steps from 25 to LAST_STEP, each rounded
+    to a step the runs sample (every 25 steps to 5,000, then every 100). Up to step 20,000
+    this keeps 106 steps, and 139 up to LAST_STEP."""
+    steps = {0, *saved_steps(LAST_STEP)}
     for t in np.geomspace(25, LAST_STEP, GRID_POINTS):
         spacing = 25 if t <= 5000 else 100
         steps.add(int(round(t / spacing)) * spacing)
@@ -98,7 +103,7 @@ def check_saved(route, runs):
         if not saved:
             raise SystemExit(f"heaviest.json has no lattices for {name}: run build/heaviest.py")
         steps = sorted(int(t) for t in saved if int(t) <= r["reached"])
-        if steps != [t for t in SAVED_STEPS if t <= r["reached"]]:
+        if steps != saved_steps(r["reached"]):
             raise SystemExit(f"{route} {describe(r)}: heaviest.json has the lattices of steps {steps}: "
                              "run build/heaviest.py")
         row = {int(t): k for k, t in enumerate(r["t"])}
@@ -142,12 +147,15 @@ def size_route(steps):
             check_group(g, f"larger box L {L} alpha {alpha:g}")   # also: every seed ends at one step
             horizon = g[0]["reached"]
             at20000 = horizon >= 20000   # the same runs at step 20,000, like the denser box
-            entries.append({
+            entry = {
                 "alpha": alpha, "L": L, "horizon": horizon,
                 "curves": {key: curve(g, key, steps) for key in CURVE_KEYS},
                 "late": late_summary(g),
                 "late20000": late_summary(cut(g, 20000)) if at20000 else None,
-            })
+            }
+            if horizon > 80000:          # the runs to 160,000 also at 80,000, where the others end
+                entry["late80000"] = late_summary(cut(g, 80000))
+            entries.append(entry)
     return {"steps": steps, "density": BOX_DENS, "entries": entries}
 
 

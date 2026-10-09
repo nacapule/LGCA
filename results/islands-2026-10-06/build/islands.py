@@ -56,10 +56,11 @@ def load(folder, horizon=None):
 
 def density(mass, area, steps=None, what="island"):
     """Particles per site; 0 where there are no sites and no particles (no island, or no old
-    cluster). An undefined (null) mass or area, or particles without sites or sites without
-    particles, stops."""
+    cluster). An undefined (null), negative or fractional mass or area, or particles without
+    sites or sites without particles, stops."""
     mass, area = np.asarray(mass, float), np.asarray(area, float)
     bad = ~(np.isfinite(mass) & np.isfinite(area)) | ((mass == 0) != (area == 0))
+    bad |= (mass < 0) | (area < 0) | (mass != np.floor(mass)) | (area != np.floor(area))
     if bad.any():
         k = np.flatnonzero(bad)[0]
         at = f"step {steps[k]:g}" if steps is not None else f"sample {k}"

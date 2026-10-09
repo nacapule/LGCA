@@ -54,40 +54,42 @@ def main():
     data = json.loads((STUDY / "page-data.json").read_text())
     entries = [(route, e) for route in ("density", "size") for e in data[route]["entries"]]
 
-    rows = []
+    time_rows = []
     for route, e in entries:
         head = settings(route, e, data) + [e["late"]["seeds"]]
         for k, step in enumerate(data[route]["steps"]):
             values = [e["curves"][key][k] for key in ("rhoOld", "rho", "rhoDensest")]
             if any(v is not None for v in values):
-                rows.append(head + [step, *map(cell, values)])
-    write("island-density-vs-time.csv",
-          ["box", "alpha", "side", "dens", "N", "seeds", "step", "old", "new", "densest"], rows)
+                time_rows.append(head + [step, *map(cell, values)])
 
-    rows = []
+    late_rows = []
     for route, e in entries:
         head = settings(route, e, data)
         # the larger-box runs go past step 20,000: their late values at 20,000 and at the end
         lates = [x for x in (e.get("late20000"), e["late"]) if x]
         for island, key in (("old", "rhoOld"), ("new", "rho"), ("densest", "rhoDensest")):
             for late in lates:
-                rows.append(head + [island, window(late), late["seeds"], *map(cell, late[key])])
-    write("late-island-density.csv",
-          ["box", "alpha", "side", "dens", "N", "island", "steps", "seeds", "mean",
-           "seed_min", "seed_max"], rows)
+                late_rows.append(head + [island, window(late), late["seeds"], *map(cell, late[key])])
 
-    rows = []
+    saved_rows = []
     for run in json.loads((STUDY / "heaviest.json").read_text())["runs"]:
         for step, m in sorted(run["steps"].items(), key=lambda item: int(item[0])):
             densest2 = m["densest2"] or [None, None]
-            rows.append([BOX[run["route"]], run["alpha"], run["size"], run["dens"], run["seed"],
-                         int(step), m["N"], m["components"], *m["island"], *m["heaviest"],
-                         *m["densest"], cell(densest2[0]), cell(densest2[1])])
-    rows.sort(key=lambda r: r[:6])
+            saved_rows.append([BOX[run["route"]], run["alpha"], run["size"], run["dens"], run["seed"],
+                               int(step), m["N"], m["components"], *m["island"], *m["heaviest"],
+                               *m["densest"], cell(densest2[0]), cell(densest2[1])])
+    saved_rows.sort(key=lambda r: r[:6])
+
+    # all three exports are made before any file is replaced
+    write("island-density-vs-time.csv",
+          ["box", "alpha", "side", "dens", "N", "seeds", "step", "old", "new", "densest"], time_rows)
+    write("late-island-density.csv",
+          ["box", "alpha", "side", "dens", "N", "island", "steps", "seeds", "mean",
+           "seed_min", "seed_max"], late_rows)
     write("islands-at-saved-steps.csv",
           ["box", "alpha", "side", "dens", "seed", "step", "N", "islands", "new_mass",
            "new_sites", "heaviest_mass", "heaviest_sites", "densest_mass", "densest_sites",
-           "densest2_mass", "densest2_sites"], rows)
+           "densest2_mass", "densest2_sites"], saved_rows)
 
 
 if __name__ == "__main__":

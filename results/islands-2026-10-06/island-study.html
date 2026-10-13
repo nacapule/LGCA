@@ -502,9 +502,12 @@ function drawLineChart(host, spec) {
     }
     if (sr.endLabel && !compact) { const last = pts[pts.length - 1]; ends.push({ x: X(last.x), y: Y(last.y), y0: Y(last.y), text: sr.endLabel }); }
   }
-  // end labels: one per curve end, duplicates merged, overlapping ones pushed apart vertically
+  // end labels: one per curve end, duplicates merged, overlapping ones pushed apart vertically;
+  // only curves that reach the right end are labelled (with longer runs on, labels at step
+  // 20,000 would sit on the curves that go on; the N scale still gives their colour)
   const gap = 15, labelW = 46, kept = [];
-  for (const e of ends) { const dup = kept.find((k) => k.text === e.text && Math.abs(k.x - e.x) < labelW && Math.abs(k.y0 - e.y0) < 6); if (!dup) kept.push(e); }
+  const right = ends.reduce((r, e) => Math.max(r, e.x), -Infinity);
+  for (const e of ends) { if (e.x < right - labelW) continue; const dup = kept.find((k) => k.text === e.text && Math.abs(k.x - e.x) < labelW && Math.abs(k.y0 - e.y0) < 6); if (!dup) kept.push(e); }
   kept.sort((a, b) => a.y0 - b.y0);
   for (let i = 0; i < kept.length; i++) { let y = kept[i].y0; for (let j = 0; j < i; j++) if (Math.abs(kept[j].x - kept[i].x) < labelW && y < kept[j].y + gap) y = kept[j].y + gap; kept[i].y = y; }
   const over = kept.length ? Math.max(...kept.map((e) => e.y)) - (m.top + ph) : 0;

@@ -1,0 +1,15 @@
+# Island study, largest box: L = 720 (1.24 million particles at 2.4 particles per site),
+# four alphas across the change in behaviour, four seeds, to step 80,000. Same settings
+# and output as islands-size-2026-10-06.toml, into the same folder; run it after that one.
+#
+#   python3 native/trace_sweep.py native/sweeps/islands-size-L720-2026-10-06.toml \
+#       results/islands-2026-10-06/size --processes 6
+
+end = 80000
+states = true
+
+[[grid]]
+sizes = [720]
+alphas = [0.8, 0.9, 0.94, 1]
+densities = [0.4]
+seeds = [12345, 777, 424242, 20260925]

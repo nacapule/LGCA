@@ -1,0 +1,23 @@
+# Larger boxes, alpha 0.9 and 0.92 continued from 160,000 to 320,000;
+# L 720 at alpha 0.9. Run after the 160,000 stage, into the same size/ folder.
+end = 320000
+states = true
+check = ["results/density-alpha-sweep-2026-09-30/data"]
+
+[[grid]]
+sizes = [60, 90, 120, 180, 240]
+alphas = [0.9, 0.92]
+densities = [0.4]
+seeds = [12345, 777, 424242, 20260925, 314159]
+
+[[grid]]
+sizes = [360, 480]
+alphas = [0.9, 0.92]
+densities = [0.4]
+seeds = [12345, 777, 424242, 20260925]
+
+[[grid]]
+sizes = [720]
+alphas = [0.9]
+densities = [0.4]
+seeds = [12345, 777, 424242, 20260925]

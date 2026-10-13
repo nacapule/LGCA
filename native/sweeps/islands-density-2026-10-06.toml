@@ -1,0 +1,28 @@
+# Island study, denser box: the density x alpha study of 2026-09-30 (L = 90, more
+# particles from a denser box), replayed to measure the islands at every sample step,
+# with the lattice saved at every checkpoint (states), which build/heaviest.py of the
+# island study reads.
+#
+#   python3 native/trace_sweep.py native/sweeps/islands-density-2026-10-06.toml \
+#       results/islands-2026-10-06/density --processes 6
+#
+# Jobs that the 2026-09-30 study ran are checked against its saved runs, row for row
+# (`check`); without that folder, add --no-check.
+
+end = 20000
+states = true
+check = ["results/density-alpha-sweep-2026-09-30/data"]
+
+# Alpha 0 to 1 in steps of 0.1: five seeds.
+[[grid]]
+sizes = [90]
+alphas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+densities = [0.025, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 0.8, 1.2, 1.6, 2.4]
+seeds = [12345, 777, 424242, 20260925, 314159]
+
+# The alphas in between, near the change in behaviour: four seeds.
+[[grid]]
+sizes = [90]
+alphas = [0.75, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86, 0.87, 0.88, 0.89, 0.92, 0.94, 0.96, 0.98]
+densities = [0.025, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.6, 0.8, 1.2, 1.6, 2.4]
+seeds = [12345, 777, 424242, 20260925]

@@ -1,2 +1,11 @@
 *.out
+.DS_Store
 __pycache__/
+# What the native tools' examples and the island study write, besides the study's page
+# and CSV files
+/runs/
+/traces/
+results/islands-2026-10-06/size/
+results/islands-2026-10-06/density/
+results/islands-2026-10-06/heaviest.json
+results/islands-2026-10-06/page-data.json

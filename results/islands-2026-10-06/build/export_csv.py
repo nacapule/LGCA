@@ -10,8 +10,9 @@ Reads page-data.json (build/page_data.py) and heaviest.json (build/heaviest.py) 
   islands-at-saved-steps.csv   the islands of every saved lattice, one row per lattice
 
 Late values use one window for every island, the steps t with 3/4 T < t <= T for runs
-ending at step T, or cut there: the larger-box runs also at T = 20,000, and those that go on
-to 160,000 also at T = 80,000, and those that go on to 320,000 also at T = 160,000. `steps` gives the first and last sample step of the window
+ending at step T, or cut there: the larger-box runs also at T = 20,000, and those that went
+past step 80,000 also at T = 80,000 and at every doubling they passed (160,000, 320,000,
+640,000). `steps` gives the first and last sample step of the window
 (every sample between them counts).
 An `old` density of 0 means that no site held enough particles to form the old cluster
 (at step 0 in the 90 x 90 boxes with 3.6 or more particles per site).
@@ -66,9 +67,10 @@ def main():
     late_rows = []
     for route, e in entries:
         head = settings(route, e, data)
-        # the larger-box runs go past step 20,000: their late values at 20,000, at 80,000 for
-        # the runs that go on to 160,000, at 160,000 for those to 320,000, and at the end
-        lates = [x for x in (e.get("late20000"), e.get("late80000"), e.get("late160000"), e["late"]) if x]
+        # the larger-box runs go past step 20,000: their late values at 20,000, at every
+        # earlier end of the runs that went on (80,000, 160,000, ...), and at the end
+        earlier = sorted((int(k[4:]), x) for k, x in e.items() if k[4:].isdigit() and x)
+        lates = [x for _, x in earlier] + [e["late"]]
         for island, key in (("old", "rhoOld"), ("new", "rho"), ("densest", "rhoDensest")):
             for late in lates:
                 late_rows.append(head + [island, window(late), late["seeds"], *map(cell, late[key])])

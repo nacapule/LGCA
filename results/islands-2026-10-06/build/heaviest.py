@@ -3,8 +3,8 @@
     python3 build/heaviest.py
 
 The runs saved their lattices at steps 100, 500, 1000, 2000, 5000, 10000 and 20000, and in
-the larger boxes also every 20000 steps after that, to the end of each run (80000, or 160000
-for the runs at alpha 0.85 to 0.94, or 320000 at alpha 0.9 and 0.92). This script finds every island of each saved lattice
+the larger boxes also every 20000 steps after that, to the end of each run (80000, or one or
+more doublings further, up to 1280000, for the settings that kept changing). This script finds every island of each saved lattice
 and records, as [particles, sites]:
 
 - island: the busiest site's island, the same island as the trace's;

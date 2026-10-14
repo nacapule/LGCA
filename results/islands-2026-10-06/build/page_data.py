@@ -5,9 +5,11 @@
 Seed means of the island density over time, on one grid of log-spaced sample steps shared
 by both boxes (so the two boxes are compared at the same steps), and late values: the mean
 over the last quarter of each run, with the smallest and largest seed value. The larger-box
-runs go on to step 80,000, at alpha 0.85 to 0.94 to 160,000, and at alpha 0.9 and 0.92
-to 320,000. Their late values are also given at step 20,000, where the denser box ends,
-and at every earlier larger-box horizon (80,000 and 160,000); the grid continues to the longest larger-box run. At every saved lattice the
+runs go on to step 80,000, and the settings that kept changing one doubling further at a
+time: to 160,000, 320,000, 640,000 or 1,280,000. Their late values are also given at step
+20,000, where the denser box ends, and at every earlier end they passed (80,000 and each
+doubling after it: late80000, late160000, ...); the grid continues to the longest
+larger-box run. At every saved lattice the
 trace's heaviest and densest islands must equal heaviest.json (build/heaviest.py); any
 difference stops the script.
 
@@ -156,10 +158,12 @@ def size_route(steps, runs):
                 "late": late_summary(g),
                 "late20000": late_summary(cut(g, 20000)) if at20000 else None,
             }
-            if horizon > 80000:          # the runs to 160,000 also at 80,000, where the others end
-                entry["late80000"] = late_summary(cut(g, 80000))
-            if horizon > 160000:         # keep the earlier last quarter before extending again
-                entry["late160000"] = late_summary(cut(g, 160000))
+            # runs that went past step 80,000, where most larger-box runs end, keep the last
+            # quarter of every earlier end: 80,000 and each doubling after it
+            earlier = 80000
+            while earlier < horizon:
+                entry[f"late{earlier}"] = late_summary(cut(g, earlier))
+                earlier *= 2
             entries.append(entry)
     return {"steps": steps, "density": BOX_DENS, "entries": entries}
 

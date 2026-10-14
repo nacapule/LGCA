@@ -230,7 +230,7 @@ details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
 <div class="pop" id="pop" hidden role="tooltip"></div>
 
 <!-- the notes at the bottom of the page: [{"title": ..., "text": ...}, ...] -->
-<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over steps 60,100 to 80,000, the new island's density grows 6.4 to 68 times, the old cluster's 5.0 to 41 times and the densest island's 7.5 to 93 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. At L 720, run at four α, the density is higher again: 1.04 to 1.68 times that at L 480 for every island definition. Longer runs shows these windows; the values are in the data files."}, {"title": "At α ≤ 0.8 the new island's density levels off, higher in bigger boxes.", "text": "Between steps 40,000–60,000 and 60,000–80,000 it changes by less than 1% at α ≤ 0.5 and by up to 8% at α 0.8. At α ≤ 0.5 the largest number of particles on one site stays the same from step 5,000 to 80,000 in 63 of 66 runs, while the pile that holds them keeps moving across the box."}, {"title": "To step 160,000, α 0.85 to 0.94 still rise in some boxes and fall in others.", "text": "Between steps 80,100–120,000 and 120,100–160,000 the new island's density changes by −26% to +46% (seed means, relative to the earlier window; −54% to +68% between 40,100–60,000 and 60,100–80,000). It rises by 10% or more in 13 of the 37 settings (box size and α), all but one at α 0.85 to 0.9, and falls by 10% or more at α 0.92 in L 360 and 480 and at α 0.94 in L 360. All seeds move the same way in only 4: up at α 0.88, L 90 (+29%) and α 0.92, L 240 (+28%), down at α 0.92, L 360 (−10%) and L 480 (−26%). At L 60, α 0.88 to 0.94, it changes by less than 2%: between steps 120,100 and 160,000 the new island holds all but at most 8 of about 8,630 particles. Longer runs shows these windows."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 0.9 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved from step 5,000 to 80,000, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 89% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "To step 320,000, α 0.9 and 0.92 have no shared trend up to L 480.", "text": "From the 120,100–160,000 window to 240,100–320,000, the new island's density changes by −21% to +16% in L 60–480. Between the last two quarter-windows, 160,100–240,000 and 240,100–320,000, it changes by −21% to +24%. In both comparisons the seeds split in 13 of the 14 settings; only α 0.92, L 360 rises in all four seeds. The earlier thinning at α 0.92 in L 360 and 480 does not continue over the doubling: +13% (4 of 4 seeds up) and +7% (3 of 4 up). In the last two quarters these are +24% (4 of 4 up) and −21% (3 of 4 down). At L 720, α 0.9 still rises: +20% over the doubling (3 of 4 seeds up), and +30% between the last two quarters (all 4 up). Changes are seed means, relative to the earlier window. Longer runs shows these windows."}, {"title": "Limits.", "text": "These are trends at finite times and box sizes."}]</script>
+<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over steps 60,100 to 80,000, the new island's density grows 6.4 to 68 times, the old cluster's 5.0 to 41 times and the densest island's 7.5 to 93 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. At L 720, run at four α, the density is higher again: 1.04 to 1.68 times that at L 480 for every island definition. The values are in the data files."}, {"title": "At α ≤ 0.5 the new island's density levels off by step 80,000, higher in bigger boxes.", "text": "Between steps 40,000–60,000 and 60,000–80,000 it changes by less than 1% at α ≤ 0.5 and by up to 8% at α 0.8. At α ≤ 0.5 the largest number of particles on one site stays the same from step 5,000 to 80,000 in 63 of 66 runs, while the pile that holds them keeps moving across the box. At α 0.8 the boxes that ran on to step 160,000 rise again over that doubling: L 60 by 31% and L 90 by 19%, all 5 seeds up in both, with the island then holding 54% and 28% of N; L 180 by 6% (4 of 5 seeds up)."}, {"title": "To step 160,000, α 0.85 to 0.94 still rise in some boxes and fall in others.", "text": "Between steps 80,100–120,000 and 120,100–160,000 the new island's density changes by −26% to +46% (seed means, relative to the earlier window; −54% to +68% between 40,100–60,000 and 60,100–80,000). It rises by 10% or more in 13 of the 37 settings (box size and α), all but one at α 0.85 to 0.9, and falls by 10% or more at α 0.92 in L 360 and 480 and at α 0.94 in L 360. All seeds move the same way in only 4: up at α 0.88, L 90 (+29%) and α 0.92, L 240 (+28%), down at α 0.92, L 360 (−10%) and L 480 (−26%). At L 60, α 0.88 to 0.94, it changes by less than 2%: between steps 120,100 and 160,000 the new island holds all but at most 8 of about 8,630 particles."}, {"title": "At α 0.85 the new island's density keeps rising in the larger boxes.", "text": "In L 180 to 480 it rises over every doubling after step 80,000, in all seeds or all but one: L 180 by 93% to step 160,000 and 58% to 320,000 (5 of 5 seeds up both times), L 240 by 41% and 66% (5 of 5), L 360 by 33% and 51% (4 of 4), and L 480 by 16% (3 of 4), 35% and, to step 640,000, 81% (4 of 4). The island holds a growing share of N: at L 180, 31% of the particles at step 160,000 and 47% at 320,000; at L 480, 5% at 320,000 and 11% at 640,000. In L 60 to 120, run to 160,000, the last doubling changes it by −3% (2 of 5 seeds up), +35% (3 of 5) and +84% (4 of 5). Changes are seed means, relative to the earlier window."}, {"title": "At α 0.88 to 0.96 the longer runs rise in some boxes and fall in others.", "text": "Over the 59 doublings after step 80,000 in L 90 to 720, the new island's density changes by −43% to +118% (seed means, relative to the earlier window), and in 51 of them the seeds split. Where all seeds move the same way, the next doubling can go the other way: at α 0.94, L 360 falls 28% to step 160,000 (0 of 4 seeds up), then rises 36% to 320,000 (4 of 4 up); at α 0.92, L 480 falls 43% to 160,000 (0 of 4 up), rises 7% and 24% to 640,000 (3 and 4 of 4 up), then changes by −4% to 1,280,000 (1 of 4 up), with the island holding 15% of N. At α 0.9, L 180 rises 118% to step 160,000 (5 of 5 up), then falls 17% and 40% to 640,000 (3 and 1 of 5 up), and L 720, after rising 20% to 320,000 (3 of 4 up), falls 19% to 640,000 (2 of 4 up). At α 0.96, L 360 falls 24% to step 160,000 (0 of 4 up). In L 60 the island holds all but a few particles, spread over most of the box."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 0.9 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved from step 5,000 to 80,000, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 89% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are changes over finite times in finite boxes, not limiting densities. A setting that changes little over one doubling can still move over the next: at α 0.9, L 120 changes by +2% to step 320,000 and by +16% to 640,000 (4 of 5 seeds up)."}]</script>
 <script id="page-data" type="application/json"></script>
 
 <script>
@@ -303,7 +303,9 @@ function fmtN(v) {
   if (v >= 1e3) return +(v / 1e3).toPrecision(3) + "k";
   return String(Math.round(v));
 }
-function fmtStep(v) { if (!isNum(v)) return "–"; if (v >= 1000) return +(v / 1000).toFixed(1) + "k"; return String(v); }
+function fmtStep(v) { if (!isNum(v)) return "–"; if (v >= 1e6) return +(v / 1e6).toFixed(2) + "M"; if (v >= 1000) return +(v / 1000).toFixed(1) + "k"; return String(v); }
+const listOr = (arr) => arr.length > 1 ? arr.slice(0, -1).join(", ") + " or " + arr[arr.length - 1] : String(arr[0] ?? "");
+const listAnd = (arr) => arr.length > 1 ? arr.slice(0, -1).join(", ") + " and " + arr[arr.length - 1] : String(arr[0] ?? "");
 function fmtTick(v) {
   if (v >= 1e6) return +(v / 1e6).toPrecision(3) + "M";
   if (v >= 1e3) return +(v / 1e3).toPrecision(3) + "k";
@@ -416,7 +418,7 @@ function padDomain(lo, hi, type, f) {
 /* ---------- the line chart ----------
    spec: { x: {type, label, domain?}, y: {type, label, domain?}, compact, title, titleNote, aria, emptyText,
            series: [{ color, points: [[x, y]], width, opacity, dash, markers, shape, hollow, line,
-                      markerColor(i), endLabel, tipLabel, style, tipRows(i) }],
+                      markerColor(i), endMark, endLabel, tipLabel, style, tipRows(i) }],
            ranges: [{x, lo, hi, color}], hover: "x" | "point", tipTitle(x) } */
 function drawLineChart(host, spec) {
   host.replaceChildren();
@@ -482,7 +484,7 @@ function drawLineChart(host, spec) {
     gData.append(s("line", { x1: x, x2: x, y1, y2, style: st }), s("line", { x1: x - 4, x2: x + 4, y1, y2: y1, style: st }), s("line", { x1: x - 4, x2: x + 4, y1: y2, y2, style: st }));
   }
   // lines and markers
-  const ends = [];
+  const ends = [], endMarks = [];
   for (const sr of spec.series) {
     const pts = [];
     sr.points.forEach(([x, y], i) => { if (ok(x, y)) pts.push({ x, y, i }); });
@@ -500,19 +502,24 @@ function drawLineChart(host, spec) {
       mk.setAttribute("style", sr.hollow ? "fill:var(--surface);stroke:" + c + ";stroke-width:2" : "fill:" + c + ";stroke:var(--surface);stroke-width:1.2;opacity:" + (sr.opacity ?? 1));
       gData.append(mk);
     }
-    if (sr.endLabel && !compact) { const last = pts[pts.length - 1]; ends.push({ x: X(last.x), y: Y(last.y), y0: Y(last.y), text: sr.endLabel }); }
+    const last = pts[pts.length - 1];
+    if (sr.endMark) endMarks.push({ x: X(last.x), y: Y(last.y), color: sr.color, hollow: sr.hollow });
+    if (sr.endLabel && !compact) ends.push({ x: X(last.x), y: Y(last.y), y0: Y(last.y), text: sr.endLabel, mark: !!sr.endMark });
   }
-  // end labels: one per curve end, duplicates merged, overlapping ones pushed apart vertically;
-  // only curves that reach the right end are labelled (with longer runs on, labels at step
-  // 20,000 would sit on the curves that go on; the N scale still gives their colour)
+  // a dot where a run ends (endMark), drawn after every curve so a curve that goes on cannot hide it
+  for (const e of endMarks) {
+    const mk = markerPath("circle", e.x, e.y, compact ? 2.6 : (narrow ? 3.4 : 4));
+    mk.setAttribute("style", e.hollow ? "fill:var(--surface);stroke:" + e.color + ";stroke-width:" + (compact ? 1.4 : 2) : "fill:" + e.color + ";stroke:var(--surface);stroke-width:1.2");
+    gData.append(mk);
+  }
+  // end labels: one per curve end, duplicates merged, overlapping ones pushed apart vertically
   const gap = 15, labelW = 46, kept = [];
-  const right = ends.reduce((r, e) => Math.max(r, e.x), -Infinity);
-  for (const e of ends) { if (e.x < right - labelW) continue; const dup = kept.find((k) => k.text === e.text && Math.abs(k.x - e.x) < labelW && Math.abs(k.y0 - e.y0) < 6); if (!dup) kept.push(e); }
+  for (const e of ends) { const dup = kept.find((k) => k.text === e.text && Math.abs(k.x - e.x) < labelW && Math.abs(k.y0 - e.y0) < 6); if (!dup) kept.push(e); }
   kept.sort((a, b) => a.y0 - b.y0);
   for (let i = 0; i < kept.length; i++) { let y = kept[i].y0; for (let j = 0; j < i; j++) if (Math.abs(kept[j].x - kept[i].x) < labelW && y < kept[j].y + gap) y = kept[j].y + gap; kept[i].y = y; }
   const over = kept.length ? Math.max(...kept.map((e) => e.y)) - (m.top + ph) : 0;
   if (over > 0) for (const e of kept) e.y -= over;
-  for (const e of kept) gLabels.append(s("text", { class: "endlabel", x: e.x + 6, y: e.y + 4, text: e.text }));
+  for (const e of kept) gLabels.append(s("text", { class: "endlabel", x: e.x + (e.mark ? 9 : 6), y: e.y + 4, text: e.text }));
   svg.append(gGrid, gAxes, gData, gLabels, gHover);
   host.append(svg);
   // an axis title longer than its plot side is squeezed to fit
@@ -628,6 +635,8 @@ function alphasAvailable() {
   return [...set].sort((a, b) => a - b);
 }
 const missingBoxNote = (alpha) => bothRoutes() && !model.alphas.size.includes(alpha) ? "denser box only" : null;
+/* the shortest and the longest larger-box run, as "80,000" and "1,280,000" */
+function runEnds() { const ends = model.entries.size.map((e) => e.horizon).filter(isNum); return ends.length ? [Math.min(...ends), Math.max(...ends)].map((v) => v.toLocaleString("en-US")) : ["20,000"]; }
 let alphaNote = "";
 function ensureAlpha() {
   const av = alphasAvailable(); alphaNote = "";
@@ -691,7 +700,7 @@ function renderRail() {
     const larger = state.routes.has("size");
     const cb = h("input", { type: "checkbox", id: "opt-longer", disabled: larger ? null : true }); cb.checked = state.longer;
     cb.addEventListener("change", () => { state.longer = cb.checked; renderAll(); });
-    opts.append(h("label", { class: "check" + (larger ? "" : " off"), for: "opt-longer", "data-tip": "Show the larger-box runs to their end: step 80,000; 160,000 at α 0.85 to 0.94; 320,000 at α 0.9 and 0.92. Late values then come from the last quarter of each run. Off: every chart stops at step 20,000, where the denser box ends. Needs the larger box." }, cb, "longer runs"));
+    opts.append(h("label", { class: "check" + (larger ? "" : " off"), for: "opt-longer", "data-tip": "Show the larger-box runs to their end, step " + runEnds().join(" to ") + " depending on the box and α; a dot marks where each run ends. Late values then come from one window per α, the last quarter of the shortest run at that α, so every N is compared over the same steps; a run that went on also has its own last quarter in the tooltip and the numbers. Off: every chart stops at step 20,000, where the denser box ends. Needs the larger box." }, cb, "longer runs"));
   }
   // islands
   $("q-rule").dataset.tip = "Which group of sites counts as the island (density = its particles ÷ its sites).\nLine pattern = island: old dashed, new solid, densest dotted.";
@@ -745,7 +754,11 @@ function timeSeriesFor(alpha, rules = activeRules()) {
         const seeds = e.late.seeds;   // every point of a curve is a mean over these seeds
         const who = (two ? ROUTES[route].short + ", " : RULES[rule].short + " · ") + e.desc + " · N " + fmtN(e.N) + (seeds ? " · " + seeds + " seeds" : "");
         const points = steps.map((t, i) => [t, t <= (state.longer && route === "size" ? Infinity : CUT) && e.curves[key] ? e.curves[key][i] : null]);
-        series.push({ color, points, width: st.width, dash: st.dash, shape: st.shape, hollow: st.hollow, style: st, endLabel: rule === anchor ? fmtN(e.N) : null, tipLabel: who, route, rule, e });
+        // with longer runs on, a dot marks where each run ends and the larger box's curves carry their N at
+        // that end, wherever it is; the denser box's curves end at step 20,000 under the curves that go on,
+        // where a column of labels would cover them (the N scale and the tooltip still give their N)
+        const label = rule === anchor && !(state.longer && route === "density");
+        series.push({ color, points, width: st.width, dash: st.dash, shape: st.shape, hollow: st.hollow, style: st, endMark: state.longer, endLabel: label ? fmtN(e.N) : null, tipLabel: who, route, rule, e });
       }
     }
   }
@@ -766,7 +779,7 @@ function timeCaption(series) {
   else if (!bothRoutes()) parts.push("route: " + ROUTES[routes[0]].chip);
   if (state.longer) {
     const larger = series.filter((sr) => sr.route === "size" && sr.points.some(([x, y]) => x > 0 && isNum(y)));
-    if (larger.length) parts.push("to step " + fmtStep(Math.max(...larger.map((sr) => sr.e.horizon))));
+    if (larger.length) parts.push((bothRoutes() ? "larger box runs end at step " : "runs end at step ") + listOr(uniq(larger.map((sr) => sr.e.horizon)).map(fmtStep)), "a dot marks each end");
   }
   if (state.matched && bothRoutes()) parts.push("matched N");
   return parts.join(" · ");
@@ -817,14 +830,24 @@ function renderGrid() {
 }
 
 /* ---------- late island density against N ---------- */
-/* default: both boxes at step 20,000; longer runs: each larger-box run's own last quarter */
-function lateOf(e, route, rule) {
-  const key = RULES[rule].key, cut = route === "size" && !state.longer;
-  const lt = cut ? e.late20000 : e.late;
+/* default: both boxes at step 20,000. Longer runs: the larger box at one window per α, the last quarter of
+   the shortest run at that α (a run that went on keeps that window as late<T>), so every N is compared over
+   the same steps; such a run's own last quarter comes along for the tooltip and the numbers table */
+function commonLateT(alpha) { const ends = model.entriesFor("size", alpha).map((e) => e.horizon).filter(isNum); return ends.length ? Math.min(...ends) : null; }
+function lateAt(lt, key) {
   const a = lt && lt[key];
   if (!a || !isNum(a[0])) return null;
   const w = lt.window || [0.75 * lt.T, lt.T];
-  return { v: a[0], lo: a[1], hi: a[2], seeds: lt.seeds, win: fmtStep(w[0]) + "–" + fmtStep(w[1]) };
+  return { v: a[0], lo: a[1], hi: a[2], seeds: lt.seeds, T: lt.T, win: fmtStep(w[0]) + "–" + fmtStep(w[1]) };
+}
+function lateOf(e, route, rule) {
+  const key = RULES[rule].key;
+  if (route !== "size") return lateAt(e.late, key);
+  if (!state.longer) return lateAt(e.late20000, key);
+  const T = commonLateT(e.alpha), lt = e.horizon === T ? e.late : (e["late" + T] || e.late);
+  const val = lateAt(lt, key);
+  if (val && lt !== e.late) val.own = lateAt(e.late, key);
+  return val;
 }
 function lateSeriesFor(rules) {
   const routes = activeRoutes(), two = bothRoutes();
@@ -845,7 +868,9 @@ function lateSeriesFor(rules) {
         tipRows: (i) => { const { e, val } = pts[i]; return { title: who + " · " + e.descLong + " · N " + e.N.toLocaleString("en-US"), rows: [
           { color: nColor(e.N), style: st, value: fmt(val.v), label: RULES[rule].short + ", density" },
           { value: fmt(val.lo) + " – " + fmt(val.hi), label: "range over " + val.seeds + " seed" + (val.seeds > 1 ? "s" : "") },
-          { value: val.win, label: "mean over steps" }] }; } });
+          { value: val.win, label: "mean over steps" },
+          ...(val.own ? [{ value: fmt(val.own.v), label: "over the run's own last quarter, " + val.own.win },
+                         { value: fmt(val.own.lo) + " – " + fmt(val.own.hi), label: "its range over the seeds" }] : [])] }; } });
     }
   }
   return { series, ranges, rows, shownN };
@@ -869,18 +894,24 @@ function renderLate() {
   const rows = panels.flatMap((p) => p.rows);
   const parts = [], larger = rows.filter((r) => r.route === "size");
   if (state.longer && larger.length) {
-    const windows = [...new Set(larger.sort((a, b) => a.e.horizon - b.e.horizon).map((r) => r.val.win))];
-    parts.push("late: last quarter of each run", "larger box " + windows.join(" or "));
+    const windows = [...new Set(larger.sort((a, b) => a.val.T - b.val.T).map((r) => r.val.win))];
+    parts.push("late: larger box " + windows.join(" or ") + ", the same steps for every N");
+    const past = larger.filter((r) => r.val.own);
+    if (past.length) parts.push("runs past " + fmtStep(Math.max(...past.map((r) => r.val.T))) + ": own last quarter in the tooltip and the numbers");
     if (rows.some((r) => r.route === "density")) parts.push("denser box 15.1k–20k");
   }
   if (missingBoxNote(state.alpha)) parts.push(missingBoxNote(state.alpha));
   cap.textContent = parts.join(" · ");
   cap.dataset.tip = cap.textContent;
   // the same values as a table, in the bottom fold
-  const tbl = h("table", { class: "data" }, h("thead", {}, h("tr", {}, h("th", { text: "route" }), h("th", { class: "l", text: "box / density" }), h("th", { text: "N" }), h("th", { class: "l", text: "island" }), h("th", { text: "density" }), h("th", { text: "seed min" }), h("th", { text: "seed max" }), h("th", { text: "seeds" }), h("th", { class: "l", text: "window" }))));
+  // with longer runs on, also where each run ended and, for a run that went past the shared window, its own last quarter
+  const own = state.longer && rows.some((r) => r.route === "size");
+  const tbl = h("table", { class: "data" }, h("thead", {}, h("tr", {}, h("th", { text: "route" }), h("th", { class: "l", text: "box / density" }), h("th", { text: "N" }), h("th", { class: "l", text: "island" }), h("th", { text: "density" }), h("th", { text: "seed min" }), h("th", { text: "seed max" }), h("th", { text: "seeds" }), h("th", { class: "l", text: "window" }),
+    own ? [h("th", { text: "run end" }), h("th", { text: "own last quarter" }), h("th", { class: "l", text: "over steps" })] : null)));
   const tb = h("tbody");
   rows.sort((a, b) => a.e.N - b.e.N || ROUTE_ORDER.indexOf(a.route) - ROUTE_ORDER.indexOf(b.route) || RULE_ORDER.indexOf(a.rule) - RULE_ORDER.indexOf(b.rule));
-  for (const r of rows) tb.append(h("tr", {}, h("td", { text: ROUTES[r.route].short }), h("td", { class: "l", text: r.e.desc }), h("td", { text: r.e.N.toLocaleString("en-US") }), h("td", { class: "l", text: RULES[r.rule].short }), h("td", { class: "strong", text: fmt(r.val.v) }), h("td", { text: fmt(r.val.lo) }), h("td", { text: fmt(r.val.hi) }), h("td", { text: r.val.seeds }), h("td", { class: "l dim", text: r.val.win })));
+  for (const r of rows) tb.append(h("tr", {}, h("td", { text: ROUTES[r.route].short }), h("td", { class: "l", text: r.e.desc }), h("td", { text: r.e.N.toLocaleString("en-US") }), h("td", { class: "l", text: RULES[r.rule].short }), h("td", { class: "strong", text: fmt(r.val.v) }), h("td", { text: fmt(r.val.lo) }), h("td", { text: fmt(r.val.hi) }), h("td", { text: r.val.seeds }), h("td", { class: "l dim", text: r.val.win }),
+    own ? [h("td", { class: "dim", text: fmtStep(r.route === "size" ? r.e.horizon : r.val.T) }), h("td", { class: r.val.own ? null : "dim", text: r.val.own ? fmt(r.val.own.v) : "same" }), h("td", { class: "l dim", text: r.val.own ? r.val.own.win : "" })] : null));
   tbl.append(tb); numbers.append(h("div", { class: "hint", text: "α = " + state.alpha + " · the late values drawn above" }), tbl);
 }
 
@@ -892,8 +923,15 @@ function renderDefs() {
   add(ROUTES.density.label, ROUTES.density.def);
   add(ROUTES.size.label, ROUTES.size.def + " L 90 at 2.4 per site is the 90 × 90 box at that density: both boxes share these runs, and the larger box has a fifth seed at α 0.85, 0.88, 0.92, 0.94 and 0.96.");
   add("Matched N", "pairs within a factor " + MATCH_RATIO + ": L 60 ↔ 1.2/site, L 90 ↔ 2.4 (shared runs), L 120 ↔ 4.8, L 180 ↔ 9.6 (same N), L 240 ↔ 14.4.");
-  add("Late value", "mean over the last quarter of the run: steps 15,100 to 20,000 in both boxes. With longer runs on, the larger box's own last quarter: 60,100 to 80,000, or 120,100 to 160,000 at α 0.85 to 0.94, or 240,100 to 320,000 at α 0.9 and 0.92. Bars: smallest and largest seed value.");
-  add("Curves", "seed means at 106 log-spaced steps up to 20,000, the same steps in both boxes (the runs sample every 25 steps to 5,000, then every 100). Step 0 is off the log axis. Colour = N, the total particle count, on one log scale for both boxes. With longer runs on, the larger box continues on the same grid to the end of its runs.");
+  // the late window of each α with longer runs on, grouped: "steps 60,100 to 80,000 at α 0, 0.5 and 1; ..."
+  const byT = new Map();
+  for (const a of model.alphas.size) { const T = commonLateT(a); if (T) byT.set(T, [...(byT.get(T) || []), a]); }
+  const winText = [...byT.keys()].sort((a, b) => a - b).map((T) => {
+    const e = model.entriesFor("size", byT.get(T)[0]).find((x) => x.horizon === T), w = (e && e.late.window) || [0.75 * T, T];
+    return "steps " + w[0].toLocaleString("en-US") + " to " + w[1].toLocaleString("en-US") + " at α " + listAnd(byT.get(T));
+  }).join("; ");
+  add("Late value", "mean over the last quarter of the run: steps 15,100 to 20,000 in both boxes. With longer runs on, the larger box uses one window per α, the last quarter of the shortest run at that α, so every N is compared over the same steps" + (winText ? ": " + winText : "") + ". A run that went past that window also has its own last quarter, in the tooltip and the numbers table. Bars: smallest and largest seed value.");
+  add("Curves", "seed means at 106 log-spaced steps up to 20,000, the same steps in both boxes (the runs sample every 25 steps to 5,000, then every 100). Step 0 is off the log axis. Colour = N, the total particle count, on one log scale for both boxes. With longer runs on, the larger box continues on the same grid to the end of its runs, step " + runEnds().join(" to ") + " depending on the box and α; a dot marks where each run ends, and the larger box's curves carry their N at that end.");
   const st = (model.data.settings) || {};
   add("Settings", Object.entries(st).map(([k, v]) => k + ": " + v).join(" · ") + (model.data.generated ? " · data " + model.data.generated.replace("T", " ") : ""));
 }

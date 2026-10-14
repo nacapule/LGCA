@@ -153,8 +153,11 @@ piles thins out.
 
 Late island values average each run's samples at steps `0.75 T < t ≤ T`,
 then average those run means over the seeds. T is the last step of the
-runs; the larger-box runs also have late values at T = 20,000, those run to at least
-160,000 also at T = 80,000, and those run to 320,000 also at T = 160,000.
+runs; the larger-box runs also have late values at T = 20,000, and those run past 80,000
+also at T = 80,000 and at each doubling they passed (160,000, 320,000, 640,000). A
+larger-box setting went on one doubling at a time while its island density still changed
+from one doubling to the next, up to T = 1,280,000. A doubling that changes little does
+not establish a limiting density.
 
 ### Island CSV columns
 

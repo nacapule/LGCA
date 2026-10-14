@@ -111,7 +111,7 @@ come out the same. `trace_sweep.py` traces every job of a config in parallel.
 
 ### The island study
 
-The island study's runs come from the five configs in [sweeps/](sweeps/), run in six
+The island study's runs come from the six configs in [sweeps/](sweeps/), run in seven
 stages. Each stage continues the traces that the stages before it left in the same
 folder:
 
@@ -123,6 +123,7 @@ folder:
 | 4 | `islands-size-L720-2026-10-06.toml` | L = 720 at four alphas, to step 80,000 |
 | 5 | `islands-size-160k-2026-10-08.toml` | Alpha 0.85 to 0.94 continued to step 160,000 (L = 720 at 0.9 and 0.94) |
 | 6 | `islands-size-320k-2026-10-09.toml` | Alpha 0.9 and 0.92 continued to step 320,000 (L = 720 at 0.9) |
+| 7 | `islands-size-doublings-2026-10-14.toml` | Settings still changing continued one doubling at a time, to step 160,000, 320,000, 640,000 or 1,280,000 |
 
 From the repository root:
 
@@ -135,13 +136,14 @@ python3 native/trace_sweep.py $S/islands-size-2026-10-06.toml $OUT/size --no-che
 python3 native/trace_sweep.py $S/islands-size-L720-2026-10-06.toml $OUT/size --no-check
 python3 native/trace_sweep.py $S/islands-size-160k-2026-10-08.toml $OUT/size --no-check
 python3 native/trace_sweep.py $S/islands-size-320k-2026-10-09.toml $OUT/size --no-check
+python3 native/trace_sweep.py $S/islands-size-doublings-2026-10-14.toml $OUT/size --no-check
 ```
 
 Every config saves the lattice at every checkpoint, which the study's scripts read.
-Four of them also compare each job that the density and alpha study ran with its saved
+Five of them also compare each job that the density and alpha study ran with its saved
 runs in `results/density-alpha-sweep-2026-09-30/data`. That folder is not part of this
 repository, so `--no-check` leaves the comparison out. A stage run on its own traces its
-jobs from the seed, with the same result. The whole study took roughly 80
+jobs from the seed, with the same result. The whole study took roughly 140
 processor-hours; `--end 500` stops every job at step 500, and the same command without
 it continues them.
 

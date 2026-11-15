@@ -72,8 +72,9 @@ module cannot load. Its comparison check is:
 node lgca-viz/verify-parity.mjs
 ```
 
-It checks ten reference cases, conservation, fermion exclusion, replay and
-default settings. Run both checks after any change to the Lab HTML.
+It checks ten reference cases, conservation, fermion exclusion, replay, that
+the engines' option defaults are the reference physics, and the Lab's opening
+settings. Run both checks after any change to the Lab HTML.
 Comparisons between implementations allow a rounding difference of
 `1e-12 × max(1, |value|)` for entropy and spatial order; lattice and
 generator states must match exactly.

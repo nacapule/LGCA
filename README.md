@@ -12,7 +12,10 @@ Lab for studying alignment and clustering.
 
 The Lab supports fermion and boson models, adjustable density and alignment,
 replay, site inspection, density views and measurement exports. Settings
-can be saved and shared.
+can be saved and shared. It opens on the island study's settings (boson,
+90 × 90, density 0.4, sensitivity 6, power normalization with alpha 0.8,
+field from the site and its neighbours, polar alignment); the named presets
+return to the reference C++ physics.
 
 ## Island study
 

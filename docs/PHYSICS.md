@@ -41,7 +41,11 @@ A field counts the particles whose directions influence a collision.
 | Site plus neighbours | All seven sites, with equal per-particle weights |
 
 Fermions always use the six neighbours. Boson field and alignment choices
-are optional; the reference defaults are **own site, nematic, sum**.
+are optional; the engines default to the reference's **own site, nematic,
+sum**. The Lab opens on the island study's settings instead: boson, 90 × 90,
+density 0.4, sensitivity 6, seed 12345, power normalization with alpha 0.8,
+site plus neighbours, polar alignment. Its named presets return to the
+reference physics.
 
 Let `m_k` be the particles in channel k across the sites contributing to
 the field, and `M = Σ_k m_k`. A boson's directional score is
@@ -72,7 +76,7 @@ For fermions, the neighbour field is divided by the same normalization
 before the Metropolis test.
 
 The study uses polar bosons, site plus neighbours, sensitivity 6, and power
-normalization. Its rules differ from the reference defaults.
+normalization. Its rules differ from the reference's.
 
 ## Measurements in the Lab
 

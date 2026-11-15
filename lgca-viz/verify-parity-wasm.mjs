@@ -44,7 +44,8 @@
 //      with the main-thread host and the real module: the engine switched with
 //      labEngine("js") while the module loads, a rewind whose target leaves the buffer,
 //      the CSV and the history kept for it through repeated thinning, the study link's
-//      defaults, and the smaller controls and displays.
+//      defaults, the state the page opens on (the island study's settings, also over form
+//      values a browser restores), and the smaller controls and displays.
 // Entropy (and the spatial order computed from it) may differ by one unit in the last
 // place between the engines: the WebAssembly build has its own log(), as the C++ has
 // (docs/FIDELITY.md). Those two are compared to 1e-12 relative; everything else exactly.
@@ -361,6 +362,26 @@ function verifyReplay(engine) {
   assert.deepEqual(sim.rng.getState(), saved[5].rng, "replay did not reproduce the generator state");
   assert.equal(sim.t, 5, "replay: t after the step");
   assert.equal(sim.nuparts, saved[5].N, "replay: N changed");
+}
+
+// The engine's option defaults are the reference physics: a WasmSim made without kernel,
+// alpha, field or alignment reports sum, 0, site, nematic and steps state for state and
+// draw for draw with a JavaScript LGCA given those options explicitly (which the 10 C++
+// scenarios compare with the reference).
+function verifyOptionDefaults(engine) {
+  for (const [model, dens, sens] of [["boson", 0.4, 2], ["fermion", 0.2, 0.8]]) {
+    const sim = new WasmSim(engine, {model, W:24, H:18, dens, seed:12345});
+    try {
+      const js = new LGCA({model, W:24, H:18, dens, seed:12345, kernel:"sum", alpha:0, bosonField:"site", bosonAlign:"nematic"});
+      assert.deepEqual([sim.kernel, sim.alpha, sim.bosonField, sim.bosonAlign], ["sum", 0, "site", "nematic"],
+        `${model}: the WebAssembly engine's option defaults must be the reference physics`);
+      compareEngines(sim, js, `${model} with the engine's option defaults, init`);
+      for (let t = 1; t <= 12; t++) {
+        sim.step(sens); js.step(sens);
+        compareEngines(sim, js, `${model} with the engine's option defaults, step ${t}`);
+      }
+    } finally { sim.destroy(); }
+  }
 }
 
 // ------------------------------------------------------------------------------------
@@ -1278,14 +1299,30 @@ async function onPage(glue, options, check) {
   finally { if (page) page.close(); }
 }
 
-// The JavaScript engine run independently with the page's default settings to step t, and
-// its chart samples (a record per step, as the worker makes them).
-function defaultRun(t) {
-  const sim = new LGCA({model:"boson", W:120, H:120, dens:0.4, seed:12345, kernel:"sum", alpha:0.5,
-                        bosonField:"site", bosonAlign:"nematic"});
+// The JavaScript engine run independently with the settings the page opens on (the island
+// study's) to step t, and its chart samples (a record per step, as the worker makes them).
+const OPENING_STATE = {model:"boson", W:90, H:90, dens:0.4, seed:12345, sens:6, kernel:"power", alpha:0.8,
+                       bosonField:"both", bosonAlign:"polar"};
+function openingRun(t) {
+  const {sens, ...options} = OPENING_STATE;
+  const sim = new LGCA(options);
   const samples = [sim.measure()];
-  for (let q = 0; q < t; q++) { sim.step(2); samples.push(sim.measure()); }
+  for (let q = 0; q < t; q++) { sim.step(sens); samples.push(sim.measure()); }
   return {sim, samples};
+}
+
+// What the page shows of its opening state, and what it must be: the island study's settings
+// in the density view (log colour, no overlay, crisp) with follow peak every step, playing.
+const OPENING_PAGE = {model:"boson", size:90, W:90, H:90, dens:0.4, seed:12345, sens:6, sensBox:"6", kernel:"power",
+  alpha:0.8, field:"both", align:"polar", mode:"density", view:"countlog", overlay:"none", smooth:"crisp",
+  follow:true, every:"1", playing:true};
+function openingState(page) {
+  const {lab, $} = page;
+  return {model:lab.P.model, size:+$("inSize").value, W:lab.sim.W, H:lab.sim.H, dens:lab.sim.dens, seed:lab.sim.seed,
+    sens:lab.P.sens, sensBox:$("numSens").value, kernel:lab.P.kernel, alpha:lab.P.alpha, field:lab.P.bosonField,
+    align:lab.P.bosonAlign, mode:lab.P.mode, view:$("inView").value, overlay:$("inOver").value,
+    smooth:$("inSmooth").value, follow:$("inRhoAuto").checked, every:String($("inRhoEvery").value),
+    playing:lab.playing};
 }
 
 async function verifyPage(glue) {
@@ -1305,7 +1342,7 @@ async function verifyPage(glue) {
       const first = page.received.find(r => r.type === "init" && r.epoch === 1);
       assert(first && first.engine === "wasm", "the first run's init was not answered on the WebAssembly engine");
       assert.equal(page.lab.labEngine(), "js", "the engine after labEngine(\"js\") during the load");
-      const ref = defaultRun(21);
+      const ref = openingRun(21);
       assert.deepEqual(sim.occ, ref.sim.occ, "the page's lattice differs from an independent run");
       assert.deepEqual(sim.frameRng, ref.sim.rng.getState(), "the page's generator state differs from an independent run");
       assert.deepEqual(hist.t, [...Array(22).keys()], "the chart's steps are not 0..21 once each");
@@ -1324,6 +1361,8 @@ async function verifyPage(glue) {
   const rewindCheck = async mutate => {
     return onPage(glue, {mutate}, async page => {
       await page.settle(() => page.lab.sim.engine !== "", "the init reply");
+      page.$("inSize").value = "120"; page.lab.reset();             // the buffer's size depends on the lattice's
+      await page.settle(() => page.lab.sim.W === 120 && page.lab.sim.engine !== "", "the 120 x 120 run");
       page.lab.$("bPlay").click();                                  // pause
       page.lab.queueSteps(80);                                      // 120^2: 69 buffered ticks
       await page.settle(() => page.lab.sim.t === 81 && page.idle(), "81 steps");
@@ -1397,7 +1436,7 @@ async function verifyPage(glue) {
       const rows = csv.map(line => line.split(","));
       assert(rows.every(r => r.length === header.length), "a CSV row has the wrong number of fields");
       const col = name => header.indexOf(name);
-      assert(rows.every(r => r.slice(col("model")).join(",") === "boson,120,120,0.4,12345,all-six-channels"),
+      assert(rows.every(r => r.slice(col("model")).join(",") === "boson,90,90,0.4,12345,all-six-channels"),
         "the run's identity is not on every row");
       const banded = rows.filter(r => r[col("band")] !== "");
       assert.deepEqual(banded.map(r => +r[col("step")]), lab.hist.bt, "the CSV's band steps differ from the band samples kept");
@@ -1415,7 +1454,7 @@ async function verifyPage(glue) {
       lab.$("bCsv").click();
       await sleep(5);
       const last = page.clipboard.at(-1).trim().split("\n").at(-1).split(",");
-      assert.deepEqual(last, ["480005", "", "", "", "0.77", ...Array(11).fill(""), "boson", "120", "120", "0.4", "12345", "all-six-channels"],
+      assert.deepEqual(last, ["480005", "", "", "", "0.77", ...Array(11).fill(""), "boson", "90", "90", "0.4", "12345", "all-six-channels"],
         "a band sample without its primary row");
       lab.hist.bt.pop(); lab.hist.bv.pop();
       const ctx = lab.ccv.getContext("2d");
@@ -1485,6 +1524,21 @@ async function verifyPage(glue) {
 
   // (d) The smaller fixes, each with the broken page it must catch.
   const small = [
+    ["the page opens on the island study's settings, also over form values a browser restores",
+     {before:document => {
+       const set = (id, v) => { document.getElementById(id).value = v; };
+       set("inSize", "120"); set("inSens", "2"); set("numSens", "2"); set("inDens", "1"); set("inSeed", "7");
+       set("inAlpha", "0.3"); set("numAlpha", "0.3"); set("inView", "dens"); set("inRhoEvery", "9");
+       document.getElementById("inRhoAuto").checked = false;
+     }},
+     async page => {
+       await page.settle(() => page.lab.sim.engine !== "", "the init reply");
+       assert.deepEqual(openingState(page), OPENING_PAGE, "the opening state");
+       assert.equal(page.lab.sim.engine, "wasm", "the opening run's engine");
+       assert.equal(page.posted.filter(p => p.type === "init").length, 1, "more than one run was started at opening");
+     },
+     [["applySnap(OPENING);", "reset();"],
+      ["$(\"inRhoAuto\").checked=true; $(\"inRhoEvery\").value=1; syncRhoAuto();", "syncRhoAuto();"]]],
     ["the speed label follows a restored slider at start",
      {before:document => { document.getElementById("inSpeed").value = "6"; }},
      async page => assert.equal(page.$("lblSpeed").textContent, "20 /s"),         // SPEEDS[6]
@@ -1492,7 +1546,7 @@ async function verifyPage(glue) {
     ["typed sensitivity ignores negative and non-numbers, keeps values above the slider", {},
      async page => {
        const box = page.$("numSens");
-       for (const v of ["-1", "abc", "1e400", ""]) { box.value = v; box.dispatch("input"); assert.equal(page.lab.P.sens, 2, `after "${v}"`); }
+       for (const v of ["-1", "abc", "1e400", ""]) { box.value = v; box.dispatch("input"); assert.equal(page.lab.P.sens, 6, `after "${v}"`); }
        box.value = "40"; box.dispatch("input"); assert.equal(page.lab.P.sens, 40);
        box.value = "-3"; box.dispatch("input"); box.dispatch("change");
        assert(page.lab.P.sens === 40 && box.value === "40", "the box does not show the sensitivity in use");
@@ -1584,10 +1638,10 @@ async function verifyPage(glue) {
        await page.settle(() => page.lab.sim.engine !== "", "the init reply");
        page.$("bPlay").click();
        await page.settle(() => page.idle() && page.lab.sim.frameT === page.lab.sim.t, "a quiet page");
-       const {lab} = page, cvs = page.$("simCanvas");
-       const site = (j, i) => (j * 120 + i) * 6;
-       // the pointer over site (0, 0): world (0.5 s0, 0.5 s0 sqrt(3)/2), s0 = 5.5
-       const at = {clientX:0.5 * 5.5, clientY:0.5 * 5.5 * Math.sqrt(3) / 2};
+       const {lab} = page, cvs = page.$("simCanvas"), s0 = 660 / lab.sim.W;
+       const site = (j, i) => (j * lab.sim.W + i) * 6;
+       // the pointer over site (0, 0): world (0.5 s0, 0.5 s0 sqrt(3)/2), s0 = 660 px / W
+       const at = {clientX:0.5 * s0, clientY:0.5 * s0 * Math.sqrt(3) / 2};
        lab.sim.occ.set([1, 1, 1, 1, 1, 1], site(0, 0));
        cvs.dispatch("mousemove", at);
        const tip = page.$("siteTip");
@@ -1612,7 +1666,8 @@ async function verifyPage(glue) {
        page.$("bPlay").click();
        await page.settle(() => page.idle(), "a quiet page");
        page.lab.sim.occ.set([9, 0, 0, 0, 0, 0], 0);                  // site (0, 0): net motion
-       page.$("simCanvas").dispatch("mousemove", {clientX:0.5 * 5.5, clientY:0.5 * 5.5 * Math.sqrt(3) / 2});
+       const s0 = 660 / page.lab.sim.W;
+       page.$("simCanvas").dispatch("mousemove", {clientX:0.5 * s0, clientY:0.5 * s0 * Math.sqrt(3) / 2});
        const rc = page.rose.getContext("2d"); rc.calls = [];
        page.setTheme({...CSS_VARS, ...DARK_VARS}); page.tick();         // the system turns dark; the pointer rests
        const stroke = rc.calls.some(c => c[0] === "=strokeStyle" && c[1] === DARK_VARS["--text-primary"]);
@@ -1625,8 +1680,10 @@ async function verifyPage(glue) {
        await page.settle(() => page.lab.sim.engine !== "", "the init reply");
        page.$("bPlay").click();
        await page.settle(() => page.idle(), "a quiet page");
+       page.$("segMode").querySelector('[data-v="particles"]').click();   // the page opens in the density view
        page.lab.sim.occ.set([9, 0, 0, 0, 0, 0], 0);                  // site (0, 0): channel 0 only
-       page.$("simCanvas").dispatch("mousemove", {clientX:0.5 * 5.5, clientY:0.5 * 5.5 * Math.sqrt(3) / 2});
+       const s0 = 660 / page.lab.sim.W;
+       page.$("simCanvas").dispatch("mousemove", {clientX:0.5 * s0, clientY:0.5 * s0 * Math.sqrt(3) / 2});
        const rc = page.rose.getContext("2d");
        const after = (seg, v) => {                                   // a control changes; the pointer rests
          rc.calls = []; page.$(seg).querySelector(`[data-v="${v}"]`).click(); page.tick();
@@ -1651,7 +1708,7 @@ async function verifyPage(glue) {
        await sleep(5);
        const csv = page.created.find(e => e.localName === "a" && String(e.download).endsWith(".csv"));
        assert(csv, "no CSV file was saved");
-       assert.equal(csv.download, `lgca-boson-120x120-d0.4-seed12345-t${t}.csv`);
+       assert.equal(csv.download, `lgca-boson-90x90-d0.4-seed12345-t${t}.csv`);
        assert.equal(await resolveObjectURL(csv.href).text(), offered, "the saved CSV is not the data offered to the clipboard");
      },
      [["    a.download=name;", "    a.download=`lgca-${sim.model}-${sim.W}x${sim.H}-d${sim.dens}-seed${sim.seed}-t${sim.t}.csv`;"],
@@ -1712,6 +1769,8 @@ async function verifyPage(glue) {
      async page => {
        await page.settle(() => page.lab.sim.engine !== "", "the init reply");
        const {lab} = page;
+       lab.$("inSize").value = "120"; lab.reset();
+       await page.settle(() => lab.sim.W === 120 && lab.sim.engine !== "" && page.idle(), "the 120 x 120 run");
        lab.$("inBlock").value = "4";
        const arr = new Int32Array(120 * 120 * 6); arr[(5 * 120 + 9) * 6] = 10;   // the block of sites 8..11, 4..7
        lab.view = {x:0, y:0, zoom:1};
@@ -1752,10 +1811,15 @@ async function verifyPage(glue) {
        page.tick();
        const c = page.lab.off.getContext("2d"); c.calls = [];
        page.tick(); page.tick(); page.tick();
+       const following = c.calls.filter(k => k[0] === "putImageData").length;   // follow peak on, as the page opens
+       page.$("inRhoAuto").checked = false; page.$("inRhoAuto").dispatch("change"); page.tick();   // a fixed ceiling
+       c.calls = [];
+       page.tick(); page.tick(); page.tick();
        const builds = c.calls.filter(k => k[0] === "putImageData").length;
        page.$("inRhoMax").value = "50"; page.tick();
        const after = c.calls.filter(k => k[0] === "putImageData").length;
        c.calls = null;
+       assert.equal(following, 0, "the picture was rebuilt with nothing changed (follow peak on)");
        assert.equal(builds, 0, "the picture was rebuilt with nothing changed");
        assert.equal(after, 1, "the picture was not rebuilt after its ceiling changed");
      },
@@ -1763,6 +1827,8 @@ async function verifyPage(glue) {
     ["a rewind clamped at the oldest buffered tick shows the history limit", {},
      async page => {
        await page.settle(() => page.lab.sim.engine !== "", "the init reply");
+       page.$("inSize").value = "120"; page.lab.reset();             // 120^2: 69 buffered ticks, fewer than 81
+       await page.settle(() => page.lab.sim.W === 120 && page.lab.sim.engine !== "", "the 120 x 120 run");
        page.$("bPlay").click();
        page.lab.queueSteps(80);
        await page.settle(() => page.lab.sim.t === 81 && page.idle(), "81 steps");
@@ -1808,21 +1874,25 @@ async function verifyPage(glue) {
      async page => {
        await page.settle(() => page.lab.sim.engine !== "" && page.lab.sim.W === 90, "the study run");
        assert.equal(page.lab.sim.dens, 0.4);
+       // the opening state is also 90 x 90 at density 0.4: these show the link was used
+       assert(page.lab.P.alpha === 0.9 && page.lab.P.bosonField === "neigh" && !page.lab.playing,
+         "the study link was not used (alpha, field or paused state differ)");
        assert.equal(page.posted.filter(p => p.type === "init").length, 1, "a default run was started before the study run");
      },
      ["const num=(k,d)=>{ const v=q.get(k); return v===null||v.trim()===\"\"?d:Number(v); };",
       "const num=(k,d)=>{ const v=q.get(k); return v===null?d:Number(v); };"]],
-    ["a study link that cannot be used is reported and the defaults run", {search:"?study=alpha&alpha=0.9&size=100&sens=6"},
+    ["a study link that cannot be used is reported and the Lab opens as usual", {search:"?study=alpha&alpha=0.9&size=100&sens=6"},
      async page => {
        await page.settle(() => page.lab.sim.engine !== "", "the init reply");
        assert(page.warnings.some(w => w.includes("the study link was not used")), "no warning about the unusable link");
-       assert(page.lab.sim.W === 120 && page.lab.playing, "the ordinary defaults are not running");
+       assert.deepEqual(openingState(page), OPENING_PAGE, "the Lab does not open as usual after an unusable study link");
      },
      ["    console.warn(\"LGCA Lab: the study link was not used", "    void(\"LGCA Lab: the study link was not used"]],
     ["the inspector names the site whose drawn centre is nearest the pointer", {},
      async page => {
        await page.settle(() => page.lab.sim.engine !== "", "the init reply");
-       const {lab} = page, cvs = page.$("simCanvas"), tip = page.$("siteTip"), s0 = 5.5, H3 = Math.sqrt(3) / 2;
+       const {lab} = page, cvs = page.$("simCanvas"), tip = page.$("siteTip"), H3 = Math.sqrt(3) / 2;
+       const {W, H} = lab.sim, s0 = 660 / W;
        let seed = 1; const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
        for (const zoom of [1, 3]) {
          lab.view = {x:0, y:0, zoom};
@@ -1832,7 +1902,7 @@ async function verifyPage(glue) {
            for (let jj = Math.floor(wy / (H3 * s0)) - 2; jj <= Math.floor(wy / (H3 * s0)) + 2; jj++)
              for (let ii = Math.floor(wx / s0 - jj / 2) - 2; ii <= Math.floor(wx / s0 - jj / 2) + 2; ii++) {
                const d = (wx - (ii + jj / 2 + 0.5) * s0) ** 2 + (wy - (jj + 0.5) * H3 * s0) ** 2;
-               if (!best || d < best.d) best = {d, i:((ii % 120) + 120) % 120, j:((jj % 120) + 120) % 120};
+               if (!best || d < best.d) best = {d, i:((ii % W) + W) % W, j:((jj % H) + H) % H};
              }
            cvs.dispatch("mousemove", {clientX, clientY});
            assert(tip.innerHTML.startsWith(`site (${best.i}, ${best.j}) `),
@@ -1871,12 +1941,14 @@ async function verifyPage(glue) {
     ["snapshot files are named by run and record the α in effect", {},
      async page => {
        await page.settle(() => page.lab.sim.engine !== "" && page.lab.sim.frameT >= 1, "the first frame");
+       // the sum kernel, so the α in effect (0) differs from the α setting (0.8) the recipe keeps
+       page.$("segKernel").querySelector('[data-v="sum"]').click();
        page.$("bCapture").click();
        const png = page.created.find(e => e.localName === "a" && String(e.download).startsWith("lgca-density-"));
-       assert.equal(png.download, `lgca-density-boson-120x120-seed12345-alpha0-t${page.lab.sim.frameT}.png`);
+       assert.equal(png.download, `lgca-density-boson-90x90-seed12345-alpha0-t${page.lab.sim.frameT}.png`);
        page.$("densitySnaps").children[0].children.find(e => e.localName === "button").click();
        const state = page.created.find(e => e.localName === "a" && String(e.download).startsWith("lgca-state-"));
-       assert.equal(state.download, `lgca-state-boson-120x120-seed12345-t${page.lab.sim.frameT}.json`);
+       assert.equal(state.download, `lgca-state-boson-90x90-seed12345-t${page.lab.sim.frameT}.json`);
        const saved = JSON.parse(await resolveObjectURL(state.href).text());
        assert.equal(saved.settings.alpha, 0, "the α in effect under the sum kernel");
      },
@@ -1890,7 +1962,8 @@ async function verifyPage(glue) {
     for (const m of mutate ? (Array.isArray(mutate[0]) ? mutate : [mutate]) : [])
       assert.notEqual(await attempt(m), null, `the page without the fix passes: ${what}`);
   }
-  results.push(`PASS the page: ${small.length} checks of controls and displays (speed label, typed sensitivity and α, ` +
+  results.push(`PASS the page: ${small.length} checks of controls and displays (the opening state over restored form values, ` +
+    "speed label, typed sensitivity and α, " +
     "band when off, boson density limit, card preferences, recipe storage and import, presets, the site inspector, " +
     "wrapped counts and guides, overlay centres, chart sharpness and redraws, field-view rebuilds, the history-limit label, an " +
     "engine failure on the main thread, study links, other-fields defaults, snapshot names, the inspector after colour and view " +
@@ -1904,12 +1977,13 @@ async function verifyPage(glue) {
       const {lab} = page;
       assert.deepEqual({model:lab.P.model, size:lab.sim.W, dens:lab.sim.dens, sens:lab.P.sens, seed:lab.sim.seed,
                         kernel:lab.P.kernel, alpha:lab.P.alpha, field:lab.P.bosonField, align:lab.P.bosonAlign,
-                        playing:lab.playing, mode:lab.P.mode},
+                        playing:lab.playing, mode:lab.P.mode, follow:page.$("inRhoAuto").checked},
         {model:"boson", size:180, dens:0.4, sens:6, seed:12345, kernel:"power", alpha:0, field:"neigh", align:"polar",
-         playing:false, mode:"density"}, "?study=alpha with no other parameters");
+         playing:false, mode:"density", follow:false}, "?study=alpha with no other parameters");
     } finally { page.close(); }
   }
-  results.push("PASS the page: ?study=alpha alone starts the documented study setup, paused, in the density view");
+  results.push("PASS the page: ?study=alpha alone starts the documented study setup, paused, in the density view " +
+    "with the fixed colour ceiling");
   return results;
 }
 
@@ -1922,6 +1996,9 @@ if (block.note) console.log(block.note);
 const engine = await loadWasmEngine(block.glue);
 verifyReplay(engine);
 console.log("PASS exact replay round trip on the WebAssembly engine");
+verifyOptionDefaults(engine);
+console.log("PASS the WebAssembly engine's option defaults are the reference physics (sum, alpha 0, own site, nematic), " +
+  "step for step with the JavaScript engine given them explicitly");
 const optionRuns = verifyOptions(engine);
 console.log(`PASS research options: ${optionRuns} combinations of kernel, boson field and alignment, ` +
   "and options changed between steps, step for step with the JavaScript engine");

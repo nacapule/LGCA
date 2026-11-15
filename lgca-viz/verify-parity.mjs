@@ -50,7 +50,7 @@ function referenceSources() {
 }
 const reference = referenceSources();
 
-function verifyHtmlStructureAndDefaults() {
+function verifyHtmlStructureAndOpening() {
   const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
   for (const script of scripts) new Function(script);
 
@@ -66,10 +66,18 @@ function verifyHtmlStructureAndDefaults() {
     assert(active,`segmented control ${id} has no active default`);
     return active[1];
   };
+  // The page opens on the island study's settings (boson, 90 x 90, density 0.4, sensitivity
+  // 6, seed 12345, power kernel with alpha 0.8, field from the site and its neighbours, polar
+  // alignment) in the density view with follow peak every step. The engines' own option
+  // defaults stay the reference physics (verifyEngineOptionDefaults); the C++ comparisons
+  // below set the reference options themselves.
+  const OPENING_EXPECTED={model:"boson",size:90,dens:0.4,sens:6,seed:12345,kernel:"power",alpha:0.8,
+    bosonField:"both",bosonAlign:"polar"};
   assert.equal(selectedValue("segModel"),"boson");
-  assert.equal(selectedValue("segKernel"),"sum");
-  assert.equal(selectedValue("segField"),"site");
-  assert.equal(selectedValue("segAlign"),"nematic");
+  assert.equal(selectedValue("segKernel"),"power");
+  assert.equal(selectedValue("segField"),"both");
+  assert.equal(selectedValue("segAlign"),"polar");
+  assert.equal(selectedValue("segMode"),"density");
   // The engine control was removed from the page (2026-10-01): WebAssembly is simply the
   // engine, the JavaScript engine (the one this suite tests) is the silent fallback when it
   // cannot load, and no choice is stored. ?engine= in the URL and labEngine() on the
@@ -79,9 +87,57 @@ function verifyHtmlStructureAndDefaults() {
   assert(!/localStorage\.(getItem|setItem)\([^)]*(lgcaEngine|ENGINE_KEY)/.test(html)&&!/ENGINE_KEY/.test(html),
     "nothing may read or write a stored engine choice (localStorage lgcaEngine)");
   assert.match(html,/localStorage\.removeItem\("lgcaEngine"\)/,"an old stored engine choice must be removed on load");
-  assert.match(html,/<option selected>120<\/option>/,"C++ lattice size 120 must be the default");
-  assert.match(html,/id="inSens"[^>]*value="2"/,"C++ sensitivity preset changed unexpectedly");
-  assert.match(html,/id="inDens"[^>]*value="0\.4"/,"C++ density preset changed unexpectedly");
+  const sizeSelect=html.match(/<select id="inSize">([\s\S]*?)<\/select>/);
+  assert(sizeSelect,"missing lattice size select inSize");
+  assert.deepEqual([...sizeSelect[1].matchAll(/<option selected>([^<]*)<\/option>/g)].map(m=>m[1]),["90"],
+    "the lattice size the page opens on must be 90 (and only 90 selected)");
+  const inputValue=id=>{
+    const m=html.match(new RegExp(`<input[^>]*\\bid="${id}"[^>]*>`));
+    assert(m,`missing input ${id}`);
+    const v=m[0].match(/\bvalue="([^"]*)"/);
+    assert(v,`input ${id} has no value`);
+    return v[1];
+  };
+  for (const [id,value] of [["inSens","6"],["numSens","6"],["inDens","0.4"],["inSeed","12345"],
+                            ["inAlpha","0.8"],["numAlpha","0.8"],["inRhoEvery","1"]])
+    assert.equal(inputValue(id),value,`the opening value of ${id} must be ${value}`);
+  assert.match(html,/<select id="inView"[^>]*>\s*<option value="countlog" selected>/,"the page must open on the log density view");
+  assert.match(html,/id="inRhoAuto" checked/,"the page must open with follow peak ticked");
+  assert.match(html,/id="inRhoMax"[^>]*disabled/,"with follow peak on, the fixed ceiling is not in use");
+  assert.match(html,/id="rowAlpha" style="display:contents"/,"the alpha row must show for the power kernel");
+
+  // The script's opening state: OPENING itself, P built from it, and the startup applying it.
+  const pageScript=scripts.find(script=>/\bconst OPENING=/.test(script));
+  assert(pageScript,"the page script must define const OPENING");
+  const openingText=pageScript.match(/\bconst OPENING=(\{[^;]*\});/);
+  assert(openingText,"const OPENING is not a plain object literal");
+  const OPENING=new Function(`return (${openingText[1]});`)();
+  assert.deepEqual(OPENING,OPENING_EXPECTED,"OPENING differs from the island study's settings");
+  const pText=pageScript.match(/\bconst P=(\{[\s\S]*?\});/);
+  assert(pText,"missing const P");
+  const P=new Function("OPENING",`return (${pText[1]});`)(OPENING);
+  for (const [key,value] of [["model","boson"],["sens",6],["mode","density"],["kernel","power"],["alpha",0.8],
+                             ["bosonField","both"],["bosonAlign","polar"]])
+    assert.equal(P[key],value,`P.${key} must open as ${value}`);
+  assert.match(pageScript,/\bapplySnap\(OPENING\);/,"the startup must apply OPENING (over restored form values)");
+}
+
+// The engines' own option defaults are the reference physics: an LGCA made without kernel,
+// alpha, field or alignment is the C++ model (sum, alpha 0, own site, nematic) and steps
+// state for state and draw for draw with one given those options explicitly.
+function verifyEngineOptionDefaults() {
+  for (const [model,dens,sens] of [["boson",0.4,2],["fermion",0.2,0.8]]) {
+    const bare=new LGCA({model,W:24,H:18,dens,seed:12345});
+    const explicit=new LGCA({model,W:24,H:18,dens,seed:12345,kernel:"sum",alpha:0,bosonField:"site",bosonAlign:"nematic"});
+    assert.deepEqual([bare.kernel,bare.alpha,bare.bosonField,bare.bosonAlign],["sum",0,"site","nematic"],
+      `${model}: the engine's option defaults must be the reference physics`);
+    for (let t=1; t<=12; t++) {
+      bare.step(sens); explicit.step(sens);
+      assert.deepEqual(bare.occ,explicit.occ,`${model}: the default-option lattice differs at step ${t}`);
+      assert.deepEqual(Array.from(bare.rng.getState()),Array.from(explicit.rng.getState()),
+        `${model}: the default-option generator differs at step ${t}`);
+    }
+  }
 }
 
 function verifyReplayRoundTrip() {
@@ -396,9 +452,11 @@ function compareState(sim, cppState, label) {
   }
 }
 
-verifyHtmlStructureAndDefaults();
+verifyHtmlStructureAndOpening();
+verifyEngineOptionDefaults();
 verifyReplayRoundTrip();
-console.log("PASS HTML structure, C++ defaults, and exact replay round trip");
+console.log("PASS HTML structure, the opening state (island study), the engines' reference option defaults, " +
+  "and exact replay round trip");
 const cdfChecks = verifyCdfBoundaries(o => new LGCA(o), "JavaScript");
 console.log(`PASS boson sampling at ${cdfChecks} forced draws on channel-distribution boundaries ` +
   "(ties and zero-weight channels) picks the reference's channel");
@@ -438,6 +496,12 @@ try {
   const batchCpp=runCpp(binaries.boson,apiScenario);
   compareMetrics(batch.line.split(/\s+/).map(Number),batchCpp.metrics,"runBatch console API");
   assert.deepEqual(engineLogs,[batch.line],"runBatch did not log exactly its returned output line");
+  // a caller who leaves out the lattice and physics options gets the reference (120 x 120, sum,
+  // own site, nematic), whatever the page opens on
+  engineLogs.length=0;
+  const bareBatch=runBatch({...apiScenario});
+  compareMetrics(bareBatch.line.split(/\s+/).map(Number),batchCpp.metrics,"runBatch console API with its own option defaults");
+  assert.deepEqual(engineLogs,[bareBatch.line],"runBatch (own defaults) did not log exactly its returned output line");
 
   const dumpScenario=scenarios.find(s=>s.model==="fermion"&&s.tsteps===6);
   const dump=dumpState({...dumpScenario,W,H,kernel:"sum",bosonField:"site",bosonAlign:"nematic"});
@@ -447,7 +511,11 @@ try {
     "dumpState header differs");
   const dumpCpp=runCpp(binaries.fermion,dumpScenario);
   assert.deepEqual(dumpLines.map(Number),dumpCpp.state,"dumpState console API differs from C++");
-  console.log("PASS runBatch and dumpState console APIs");
+  const bareDump=dumpState({...dumpScenario}).split("\n");
+  assert.equal(bareDump.shift(),`DUMP t=${dumpScenario.tsteps} N=${dumpInit.nuparts}`,
+    "dumpState (own option defaults) header differs");
+  assert.deepEqual(bareDump.map(Number),dumpCpp.state,"dumpState console API with its own option defaults differs from C++");
+  console.log("PASS runBatch and dumpState console APIs, with the reference options given and left out");
   console.log(`\nAll ${scenarios.length} C++/JavaScript parity scenarios passed.`);
 } finally {
   rmSync(tempDir,{recursive:true,force:true});

@@ -40,6 +40,7 @@
   .ctl input[type=number],.ctl select{width:100%;background:var(--surface-1);color:var(--text-primary);
        border:1px solid var(--border);border-radius:5px;padding:3px 6px;font-size:12px}
   .ctl .full{grid-column:2/4}
+  .ctl input:disabled{opacity:.45;cursor:not-allowed}
   .note{color:var(--text-muted);font-size:11px}
   .btnrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   button{background:var(--surface-1);color:var(--text-primary);border:1px solid var(--border);
@@ -130,7 +131,7 @@
 </head>
 <body>
 <h1>LGCA Lab</h1>
-<p class="sub">Hexagonal lattice-gas cellular automaton — fermion &amp; boson, reference dynamics of <code>lgca_clean-1.cpp</code> (same WELL1024a random stream). Runs entirely in this file.</p>
+<p class="sub">Hexagonal lattice-gas cellular automaton — fermion &amp; boson. Settings marked (C++) give the reference dynamics of <code>lgca_clean-1.cpp</code> (same WELL1024a random stream). Runs entirely in this file.</p>
 
 <div class="wrap">
   <div id="stage">
@@ -161,9 +162,9 @@
       <div style="font-size:12.5px;color:var(--text-secondary)">
         <ul>
           <li><b>The model.</b> Each lattice site has 6 channels, one per hexagonal direction. Every step: (1) <b>collision</b> — each site re-picks its channel occupations, conserving its particle count; (2) <b>streaming</b> — every particle hops exactly one site along its channel. There is no rest channel: everything moves at speed 1, every step.</li>
-          <li><b>Fermion</b>: at most one particle per channel; collision = 12 Metropolis permutation proposals, energy = sens × polar alignment with the 6 neighbours. <b>Boson</b>: unlimited occupancy; every particle re-draws its channel each step from a Boltzmann law built (by default) from the site's own nematic field.</li>
+          <li><b>Fermion</b>: at most one particle per channel; collision = 12 Metropolis permutation proposals, energy = sens × polar alignment with the 6 neighbours. <b>Boson</b>: unlimited occupancy; every particle re-draws its channel each step from a Boltzmann law built from an alignment field (in the C++: the site's own, nematic).</li>
           <li><b>Motion.</b> The model updates at integer steps: particles hop one site along their channel after collision. Interpolated view draws a constant-speed glide between those endpoints; it is a way to show the discrete hop, not an extra rule or a tracked particle identity. <b>Raw states</b> shows the exact streamed lattice at each integer step.</li>
-          <li><b>Physics toggles.</b> Defaults marked (C++) reproduce <code>lgca_clean-1.cpp</code> exactly. <i>kernel: average</i> divides the alignment field by the particle count that built it (removing the explicit crowd-size factor at fixed directional composition). The combined <i>average + neighbours + polar</i> settings reproduce the active boson collision rule in <code>lgca_noib.cpp</code>; they do not reproduce that older program's different RNG initialization. <i>power α</i> is a research extension: divide by M<sup>α</sup>, with exact sum at α=0 and average at α=1. The <i>neighbours only</i> field excludes the centre; <i>site + neighbours</i> includes all seven sites in both the field and the normalization count M. Any non-default toggle is a labelled departure from <code>lgca_clean-1.cpp</code>.</li>
+          <li><b>Physics toggles.</b> Settings marked (C++) reproduce <code>lgca_clean-1.cpp</code> exactly; the named presets return to them. The Lab opens on the island study's settings instead: power α 0.8, site + neighbours, polar. <i>kernel: average</i> divides the alignment field by the particle count that built it (removing the explicit crowd-size factor at fixed directional composition). The combined <i>average + neighbours + polar</i> settings reproduce the active boson collision rule in <code>lgca_noib.cpp</code>; they do not reproduce that older program's different RNG initialization. <i>power α</i> is a research extension: divide by M<sup>α</sup>, with exact sum at α=0 and average at α=1. The <i>neighbours only</i> field excludes the centre; <i>site + neighbours</i> includes all seven sites in both the field and the normalization count M. Any setting not marked (C++) is a labelled departure from <code>lgca_clean-1.cpp</code>.</li>
           <li><b>Random-stream equivalence.</b> Same seed + same settings uses the same WELL1024a draws and produces the same states as the corresponding C++ build (MODEL=FERMION or BOSON), verified state-for-state by <code>verify-parity.mjs</code>. Changing sensitivity/kernel mid-run keeps the stated transition rule but is a parameter-change experiment no single C++ run performs. Cross-platform caveat: browser and C++ <code>exp</code>/<code>log</code> libraries can differ in the last bit, so an exceptionally near-threshold random draw could make bitwise trajectories diverge even though the stochastic dynamics are the same.</li>
           <li><b>Replay &amp; time travel.</b> The tool keeps the recent post-collision states in memory. The replay slider scrubs through them view-only (press <i>live</i> to snap back to the newest state). The transport buttons move the <i>actual</i> state: <b>−1</b>/<b>−N</b> restore the exact past lattice <i>and</i> the random-number generator. A rewind keeps the physics controls as they are now: stepping forward again reproduces the original trajectory only when the steps run with the settings they originally had (after a mid-run change, apply the same changes again at the same steps); other settings start a counterfactual branch. <b>Play</b>, <b>+1</b> and <b>+N</b> continue from the replayed step while you are replaying, and discard the later steps. Back-stepping is limited to the buffered window; a target that has left it stops play. Tip: <kbd>,</kbd> then <kbd>.</kbd> re-runs a single tick with its glide animated.</li>
           <li><b>Order parameters</b> (0→1 for a nonempty lattice; N = total particles, channel k has unit vector c<sub>k</sub> at angle θ<sub>k</sub> = 60°·k, n<sub>k</sub> = channel occupancy). Polar, nematic and spatial follow the C++; band includes the channel omitted by the reference:
@@ -208,45 +209,45 @@
           <button data-v="boson" class="on">boson</button>
         </span>
         <label for="inSens">sensitivity</label>
-        <input type="range" id="inSens" min="0" max="32" step="0.05" value="2">
-        <input type="number" id="numSens" min="0" step="0.05" value="2">
+        <input type="range" id="inSens" min="0" max="32" step="0.05" value="6">
+        <input type="number" id="numSens" min="0" step="0.05" value="6">
         <label for="inDens">density</label>
         <input type="number" id="inDens" min="0" step="0.05" value="0.4">
         <span class="note">per channel · on reset</span>
         <label for="inSize">lattice</label>
-        <select id="inSize"><option>60</option><option>90</option><option selected>120</option><option>180</option><option>240</option><option>360</option></select>
+        <select id="inSize"><option>60</option><option selected>90</option><option>120</option><option>180</option><option>240</option><option>360</option></select>
         <span class="note">on reset</span>
         <label for="inSeed">seed</label>
         <input type="number" id="inSeed" step="1" value="12345">
         <button id="bDice" title="random seed" style="padding:2px 6px">🎲</button>
         <label title="sum = exact lgca_clean-1.cpp">kernel</label>
         <span class="seg full" id="segKernel">
-          <button data-v="sum" class="on">sum (C++)</button>
+          <button data-v="sum">sum (C++)</button>
           <button data-v="avg">average</button>
-          <button data-v="power">power α</button>
+          <button data-v="power" class="on">power α</button>
         </span>
-        <span id="rowAlpha" style="display:none">
+        <span id="rowAlpha" style="display:contents">
           <label for="inAlpha">exponent α</label>
-          <input type="range" id="inAlpha" min="0" max="2" step="0.01" value="0.5">
-          <input type="number" id="numAlpha" aria-label="Alpha value" min="0" max="2" step="0.01" value="0.5">
+          <input type="range" id="inAlpha" min="0" max="2" step="0.01" value="0.8">
+          <input type="number" id="numAlpha" aria-label="Alpha value" min="0" max="2" step="0.01" value="0.8">
           <span></span><span class="btnrow full">
             <button id="bAlphaDown" aria-label="Decrease alpha by 0.1">−0.1</button>
             <button id="bAlphaUp" aria-label="Increase alpha by 0.1">+0.1</button>
           </span>
         </span>
-        <label></label><span class="full note" id="alphaNote">α = 0 · field / Mᵅ. M counts contributing particles; an empty field is unbiased.</span>
+        <label></label><span class="full note" id="alphaNote">α = 0.8 · field / Mᵅ. M counts contributing particles; an empty field is unbiased.</span>
         <label></label><span class="full note">For independent comparisons: choose settings, then Reset. Changing physics during play changes the experiment.</span>
         <span id="rowBosonField" style="display:contents">
           <label title="own site = reference C++; neighbours only = lgca_noib.cpp; site + neighbours = centre-inclusive research variant">field from</label>
           <span class="seg full" id="segField">
-            <button data-v="site" class="on">own site (C++)</button>
+            <button data-v="site">own site (C++)</button>
             <button data-v="neigh">neighbours only</button>
-            <button data-v="both" title="Central site plus six neighbours; M counts particles in all seven sites">site + neighbours</button>
+            <button data-v="both" class="on" title="Central site plus six neighbours; M counts particles in all seven sites">site + neighbours</button>
           </span>
           <label title="nematic = exact lgca_clean-1.cpp (axis, J²); polar = direction (J), as in lgca_noib.cpp">alignment</label>
           <span class="seg full" id="segAlign">
-            <button data-v="nematic" class="on">nematic (C++)</button>
-            <button data-v="polar">polar</button>
+            <button data-v="nematic">nematic (C++)</button>
+            <button data-v="polar" class="on">polar</button>
           </span>
         </span>
       </div>
@@ -261,11 +262,11 @@
       <div class="ctl">
         <label>view</label>
         <span class="seg full" id="segMode">
-          <button data-v="particles" class="on">particles</button>
-          <button data-v="density">density</button>
+          <button data-v="particles">particles</button>
+          <button data-v="density" class="on">density</button>
           <button data-v="fields">other fields</button>
         </span>
-        <span id="rowsParticles" style="display:contents">
+        <span id="rowsParticles" style="display:none">
           <label>motion</label>
           <span class="seg full" id="segMotion">
             <button data-v="interp" class="on">interpolated</button>
@@ -285,28 +286,30 @@
           <label></label>
           <span class="full note"><label><input type="checkbox" id="inGuides" checked> lattice guides when zoomed</label></span>
         </span>
-        <span id="rowsFields" style="display:none">
+        <span id="rowsFields" style="display:contents">
           <label for="inView">colour by</label>
           <select id="inView" class="full">
-            <option value="countlog">density (log · fixed count scale)</option>
-            <option value="dens" selected>density (dark → bright)</option>
+            <option value="countlog" selected>density (log · count scale)</option>
+            <option value="dens">density (dark → bright)</option>
             <option value="classic">density (classic C++ blue)</option>
             <option value="nem">alignment axis (hue = angle)</option>
             <option value="dir">net motion (hue = direction)</option>
           </select>
           <label for="inRhoMax">colour ceiling</label>
-          <input type="number" id="inRhoMax" min="1" value="100" step="10">
+          <input type="number" id="inRhoMax" min="1" value="100" step="10" disabled>
           <span class="note">particles/site · log view</span>
+          <label></label>
+          <span class="full note" title="The ceiling becomes the count of the fullest site, taken again every N steps. Colours then do not mean the same count at another step or in another run; for comparisons use a fixed ceiling."><label><input type="checkbox" id="inRhoAuto" checked> follow peak</label> · every <input type="number" id="inRhoEvery" min="1" value="1" step="1" aria-label="steps between ceiling updates" style="width:72px"> steps</span>
           <label for="inOver">overlay</label>
           <select id="inOver" class="full">
             <option value="axis">bars: local alignment axis</option>
-            <option value="flux" selected>arrows: net motion</option>
-            <option value="none">none</option>
+            <option value="flux">arrows: net motion</option>
+            <option value="none" selected>none</option>
           </select>
           <label for="inBlock">overlay grain</label>
           <select id="inBlock" class="full"><option>2</option><option selected>4</option><option>8</option></select>
           <label for="inSmooth">render</label>
-          <select id="inSmooth" class="full"><option value="soft" selected>soft (pixel interpolation)</option><option value="crisp">crisp (raw sites)</option></select>
+          <select id="inSmooth" class="full"><option value="soft">soft (pixel interpolation)</option><option value="crisp" selected>crisp (raw sites)</option></select>
         </span>
         <label></label>
         <span class="full btnrow"><button id="bView">reset view</button><span class="note">wheel = zoom · drag = pan · double-click = reset</span></span>
@@ -1027,9 +1030,17 @@ const DIRCOL=["#e5484d","#e0a336","#7fbf3f","#2bbfa3","#4f9de6","#b57bd6"];
 const DIRARR=["→","↗","↖","←","↙","↘"];
 const UNICOL="#6ec8ff";
 
+/* The settings the Lab opens on: the island study's (boson, 90 × 90, density 0.4, sensitivity 6,
+   seed 12345, power kernel with α 0.8, field from the site and its six neighbours, polar
+   alignment), in the density view with "follow peak" every step, playing. The markup starts
+   with the same values, and the page applies them again when it starts, so a form value the
+   browser restores on reload cannot change the opening run. The engines' own option defaults
+   stay the reference C++ physics (sum, own site, nematic), as do runBatch and dumpState; the
+   named presets return to it. */
+const OPENING={model:"boson",size:90,dens:0.4,sens:6,seed:12345,kernel:"power",alpha:0.8,bosonField:"both",bosonAlign:"polar"};
 const P={
-  model:"boson", sens:2.0, mode:"particles", motion:"interp",
-  pcol:"dir", trail:"off", kernel:"sum", alpha:0.5, bosonField:"site", bosonAlign:"nematic"
+  model:OPENING.model, sens:OPENING.sens, mode:"density", motion:"interp",
+  pcol:"dir", trail:"off", kernel:OPENING.kernel, alpha:OPENING.alpha, bosonField:OPENING.bosonField, bosonAlign:OPENING.bosonAlign
 };
 let sim=null, playing=true, phase=0, stepAnim=0;
 let hist={t:[],p:[],n:[],s:[],rho:[],cfg:[],bt:[],bv:[]};
@@ -1460,9 +1471,30 @@ function hsl2u32(h,s,l){
   return (0xFF000000|(b<<16)|(g<<8)|r)>>>0;
 }
 const BG_U32=0xFF130E0B;
-function buildFieldImage(arr){
+/* The log view's colour ceiling: the "colour ceiling" box, or with "follow peak" the count
+   of the fullest site in the drawn state, taken again once the drawn step is N or more steps
+   from the step it was taken at (and on a new run, a change of N, or switching it on);
+   between updates the colours keep one scale. lastCeil is the ceiling of the last image. */
+let rhoAuto={ceil:0,t:0,epoch:-1,every:0}, lastCeil=100;
+function rhoEvery(){ return Math.max(1,Math.floor(+$("inRhoEvery").value||1)); }
+function colourCeiling(arr,t){
+  if(!$("inRhoAuto").checked) return Math.max(1,+$("inRhoMax").value||100);
+  if(t<0) return lastCeil;   // a new run before its first frame: the lattice is still empty
+  const every=rhoEvery();
+  if(rhoAuto.epoch!==epoch||rhoAuto.every!==every||Math.abs(t-rhoAuto.t)>=every){
+    let peak=0;
+    for(let b=0;b<arr.length;b+=6){
+      const n=arr[b]+arr[b+1]+arr[b+2]+arr[b+3]+arr[b+4]+arr[b+5];
+      if(n>peak) peak=n;
+    }
+    rhoAuto={ceil:Math.max(1,peak),t,epoch,every};
+  }
+  return rhoAuto.ceil;
+}
+function buildFieldImage(arr,t){
   const {W,H}=sim, mode=$("inView").value, dens=sim._dens||0.4;
-  const W2=2*W, logCeil=Math.log1p(Math.max(1,+$("inRhoMax").value||100));
+  lastCeil=mode==="countlog"?colourCeiling(arr,t):lastCeil;
+  const W2=2*W, logCeil=Math.log1p(lastCeil);
   offU32.fill(BG_U32);
   for(let j=0;j<H;j++){
     for(let i=0;i<W;i++){
@@ -1497,7 +1529,7 @@ function buildFieldImage(arr){
   offCtx.putImageData(offImg,0,0);
 }
 function drawFields(arr){
-  buildFieldImage(arr);
+  buildFieldImage(arr,replay.on&&replay.slotK>=0?replay.slotK:sim.frameT);
   ctx.fillStyle=BG; ctx.fillRect(0,0,CSSW,cssH);
   ctx.imageSmoothingEnabled=($("inSmooth").value==="soft");
   const z=view.zoom;
@@ -2009,7 +2041,8 @@ let lastPKey="", lastPArr=null, lastFKey="", lastFArr=null;
 /* the field view's picture depends on these and on the array drawn */
 function fieldKey(){
   return epoch+"|"+sim.frameT+"|"+(replay.on?replay.slotK:-2)+"|"+view.x+"|"+view.y+"|"+view.zoom+"|"+cvs.width+"|"+cvs.height+"|"+
-         $("inView").value+"|"+$("inRhoMax").value+"|"+$("inOver").value+"|"+$("inBlock").value+"|"+$("inSmooth").value;
+         $("inView").value+"|"+$("inRhoMax").value+"|"+$("inRhoAuto").checked+"|"+rhoEvery()+"|"+
+         $("inOver").value+"|"+$("inBlock").value+"|"+$("inSmooth").value;
 }
 function particleKey(f,isRaw){
   return sim.frameT+"|"+(replay.on?replay.slotK:-2)+"|"+f+"|"+isRaw+"|"+view.x+"|"+view.y+"|"+view.zoom+"|"+
@@ -2052,7 +2085,10 @@ function updateDensityReadout(){
   if(!m) return;
   $("densityReadout").textContent=`Streamed t=${tick} · mean ${m.mean.toFixed(3)} particles/site · peak ${m.max} · peak / N ${(100*m.fraction).toFixed(2)}% · effective occupied area ${m.effectiveArea.toFixed(1)} sites`;
   const log=P.mode!=="particles" && $("inView").value==="countlog";
-  $("densityScale").textContent=log?`Log colour scale: 0 → ${Math.max(1,+$("inRhoMax").value||100)} particles/site (white at or above ceiling). Colour saturation is not a density plateau.`:"Density readout uses exact site counts; soft rendering only interpolates pixels.";
+  const every=rhoEvery();
+  $("densityScale").textContent=!log?"Density readout uses exact site counts; soft rendering only interpolates pixels.":
+    $("inRhoAuto").checked?`Log colour scale: 0 → ${lastCeil} particles/site (follows the peak, ${every===1?"every step":`every ${every} steps`}). Colours are not comparable across steps or runs.`:
+    `Log colour scale: 0 → ${Math.max(1,+$("inRhoMax").value||100)} particles/site (white at or above ceiling). Colour saturation is not a density plateau.`;
 }
 $("bCapture").addEventListener("click",()=>{
   playing=false; $("bPlay").textContent="Play";
@@ -2062,25 +2098,27 @@ $("bCapture").addEventListener("click",()=>{
   const shownSlot=replay.on&&replay.slotK>=0;
   const arr=new Int32Array(shownSlot?replayStreamed():sim.occ), tick=shownSlot?replay.slotK:sim.frameT;
   const capturedRng=Array.from(shownSlot?replay.slotRng:sim.frameRng);
-  const old=$("inView").value; $("inView").value="countlog"; buildFieldImage(arr); $("inView").value=old;
+  const old=$("inView").value; $("inView").value="countlog"; buildFieldImage(arr,tick); $("inView").value=old;
   /* the run's model, size, density and seed; the physics as now, with the alpha in effect
      (0 for sum, 1 for average) */
   const cur=currentSettings(), alphaNow=cur.kernel==="power"?cur.alpha:cur.kernel==="avg"?1:0;
   const m=densityStats(arr), settings={...cur,model:sim.model,size:sim.W,dens:sim.dens,seed:sim.initialSeed,alpha:alphaNow};
   const runName=`${sim.model}-${sim.W}x${sim.H}-seed${sim.initialSeed}`;
-  const label=snapParamLine(settings), ceiling=Math.max(1,+$("inRhoMax").value||100);
+  const label=snapParamLine(settings), ceiling=lastCeil, follow=$("inRhoAuto").checked;
+  const ceilingFrom=follow?`fullest site at t=${rhoAuto.t}, taken every ${rhoEvery()} steps`:"fixed";
+  const peakNote=!follow?"":rhoAuto.t===tick?" (peak)":` (peak at t=${rhoAuto.t})`;
   const out=document.createElement("canvas"); out.width=720; out.height=710;
   const c=out.getContext("2d"); c.fillStyle=BG; c.fillRect(0,0,720,710);
   c.imageSmoothingEnabled=false; c.drawImage(off,0,0,720,624);
   c.fillStyle="#fff"; c.font="12px sans-serif"; c.fillText(label,12,645);
   c.fillText(`t=${tick} · N=${m.N} · peak=${m.max} · peak/N=${(100*m.fraction).toFixed(2)}%`,12,665);
-  c.fillText(`Log colour: 0–${ceiling} particles/site · exact streamed state · current physics settings`,12,685);
+  c.fillText(`Log colour: 0–${ceiling} particles/site${peakNote} · exact streamed state · current physics settings`,12,685);
   const url=out.toDataURL("image/png"), box=document.createElement("div"); box.style.marginTop="12px";
   const img=document.createElement("img"); img.src=url; img.alt=label+` at t=${tick}`; img.style.width="100%";
   const a=document.createElement("a"); a.href=url; a.download=`lgca-density-${runName}-alpha${alphaNow}-t${tick}.png`; a.textContent="save PNG";
   const b=document.createElement("button"); b.textContent="save state + metadata";
   b.addEventListener("click",()=>{
-    const blob=new Blob([JSON.stringify({settings,t:tick,stage:"after streaming",rng:capturedRng,colour:{mapping:"log1p",ceiling},metrics:m,occupancy:Array.from(arr),note:"Settings are current; a mid-run physics change is not a fresh fixed-parameter run."})],{type:"application/json"});
+    const blob=new Blob([JSON.stringify({settings,t:tick,stage:"after streaming",rng:capturedRng,colour:{mapping:"log1p",ceiling,ceilingFrom},metrics:m,occupancy:Array.from(arr),note:"Settings are current; a mid-run physics change is not a fresh fixed-parameter run."})],{type:"application/json"});
     const d=document.createElement("a"); d.href=URL.createObjectURL(blob); d.download=`lgca-state-${runName}-t${tick}.json`; d.click(); setTimeout(()=>URL.revokeObjectURL(d.href),5000);
   });
   box.append(img,a,document.createTextNode(" "),b); $("densitySnaps").prepend(box);
@@ -2374,7 +2412,7 @@ segWire("segModel","model",v=>{
   $("rowBosonField").style.display=fer?"none":"contents";
   if(fer){ if(+$("inDens").value>=1) $("inDens").value=0.2; $("inDens").max=0.95; }
   else $("inDens").removeAttribute("max");            // boson density has no upper limit
-  const d={fermion:[0.8,0.2],boson:[2.0,0.4]}[v];
+  const d={fermion:[0.8,0.2],boson:[OPENING.sens,OPENING.dens]}[v];
   P.sens=d[0]; $("inSens").value=d[0]; $("numSens").value=d[0]; $("inDens").value=d[1];
   buildPresets(); reset();
 });
@@ -2403,6 +2441,14 @@ segWire("segAlign","bosonAlign");
    own defaults, also when the particle view came in between, unless they were changed since */
 let densitySetFields=false;
 for(const id of ["inView","inOver","inSmooth"]) $(id).addEventListener("change",()=>{ densitySetFields=false; });
+/* follow peak: the fixed ceiling is not in use (greyed) and the update interval is; the peak is
+   taken again at once */
+function syncRhoAuto(){
+  const on=$("inRhoAuto").checked;
+  $("inRhoMax").disabled=on; $("inRhoEvery").disabled=!on; rhoAuto.epoch=-1;
+}
+$("inRhoAuto").addEventListener("change",syncRhoAuto);
+syncRhoAuto();            // a reload may bring the box back ticked
 segWire("segMode","mode",v=>{
   $("rowsParticles").style.display=v==="particles"?"contents":"none";
   $("rowsFields").style.display=v!=="particles"?"contents":"none";
@@ -2758,7 +2804,7 @@ window.labEngine=function(name){
 
 /* Optional reproducible study links: ?study=alpha&alpha=…&size=…&dens=…&sens=…&seed=…&field=…
    An empty value counts as absent. A link that cannot be used is reported in the console
-   and the ordinary defaults run. */
+   and the Lab opens as usual (OPENING). */
 function studyRecipe(q){
   if(q.get("study")!=="alpha") return null;
   const num=(k,d)=>{ const v=q.get(k); return v===null||v.trim()===""?d:Number(v); };
@@ -2782,7 +2828,12 @@ const study=studyRecipe(new URLSearchParams(location.search));
 if(study&&applySnap(study)){                 // the study run is the first run: no default run before it
   playing=false; $("bPlay").textContent="Play";
   $("segMode").querySelector('[data-v="density"]').click();
-} else reset();
+  $("inRhoAuto").checked=false; syncRhoAuto();   // a study link keeps the fixed colour ceiling it always had
+} else {
+  applySnap(OPENING);                        // the opening run, also over form values a reload restored
+  $("segMode").querySelector('[data-v="density"]').click();
+  $("inRhoAuto").checked=true; $("inRhoEvery").value=1; syncRhoAuto();
+}
 requestAnimationFrame(frame);
 </script>
 </body>

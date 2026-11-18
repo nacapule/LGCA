@@ -1,0 +1,1525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LGCA Island Study</title>
+<style>
+/* Top strip, one bar of controls, then the charts at full width: for one α the island density and the
+   spatial order over time, one above the other on the same step axis; or a grid of panels, one per α; or the
+   late values against L. What is settled (larger box, new island, runs to their end) sits in a menu on the bar.
+   Colour is N on one log scale shared by both boxes. */
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --surface-2: #e9edf1;
+  --ink: #15202a; --ink-2: #46535f; --muted: #76828c; --line: #dde2e7; --axis: #b4bdc5;
+  --accent: #2a78d6; --focus: #2a78d6;
+  /* N from 1.2 thousand to 1.24 million, log scale: mint, teal, blue, indigo (darker = more particles) */
+  --N0: #7ad4a5; --N1: #34bdab; --N2: #03a0ac; --N3: #0082a6; --N4: #0163a5; --N5: #2d3f96; --N6: #3b1a7a;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --radius: 6px;
+  --shadow: 0 1px 2px rgba(21, 32, 42, 0.06), 0 0 0 1px rgba(21, 32, 42, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121518; --surface: #1b1f24; --surface-2: #262c33; --ink: #eef1f4; --ink-2: #c3cad1; --muted: #8e98a2;
+    --line: #2b3239; --axis: #434c55; --accent: #3987e5; --focus: #6fa8ef;
+    --N0: #3db07c; --N1: #1cbba8; --N2: #33c2cf; --N3: #5fc6ed; --N4: #8fc8fe; --N5: #b9cbff; --N6: #d8d1fe;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121518; --surface: #1b1f24; --surface-2: #262c33; --ink: #eef1f4; --ink-2: #c3cad1; --muted: #8e98a2;
+  --line: #2b3239; --axis: #434c55; --accent: #3987e5; --focus: #6fa8ef;
+  --N0: #3db07c; --N1: #1cbba8; --N2: #33c2cf; --N3: #5fc6ed; --N4: #8fc8fe; --N5: #b9cbff; --N6: #d8d1fe;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.35; -webkit-text-size-adjust: 100%; min-height: 100%; }
+[hidden] { display: none !important; }
+a { color: var(--accent); }
+b, strong { font-weight: 700; }
+kbd { font: inherit; font-size: 10.5px; line-height: 1; padding: 1px 4px; border-radius: 3px; border: 1px solid var(--axis); color: var(--muted); background: var(--surface); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
+
+.app { display: block; min-height: 100vh; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 18px; padding: 8px 14px 6px; border-bottom: 1px solid var(--line); }
+.top h1 { font-size: 19px; font-weight: 700; margin: 0; letter-spacing: -0.01em; white-space: nowrap; }
+.top .line { color: var(--ink-2); font-size: 14px; }
+.top .settings { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
+/* the bar stays in view; charts keep fixed heights and the page scrolls */
+.stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 0 14px 10px; align-items: start; }
+.bar { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 7px 0 6px; background: var(--bg); box-shadow: 0 1px 0 var(--line); }
+.charts { display: grid; gap: 10px; min-width: 0; }
+/* one α: the two time charts fill one screen between them, so their step axes can be read together */
+.card.time > .chart, .card.order > .chart { height: clamp(205px, calc((100vh - 262px) / 2), 460px); }
+.card.late > .chart { height: min(max(360px, 40vh), 560px); }
+.card.lside > .chart { height: min(max(420px, 52vh), 700px); }
+.card.lright > .chart { height: min(max(300px, 34vh), 460px); }
+.card.lright > #lent-chart { height: min(max(380px, 46vh), 600px); }
+.card.lside .chart.split > .chart { height: min(max(380px, 46vh), 600px); }
+/* vs L on a wide screen: the two charts side by side, one screen tall; the second chart fills its card, whatever
+   the length of its caption */
+@media (min-width: 1100px) {
+  #lview { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: stretch; }
+  #lview .caption { white-space: normal; }
+  #lview .card.lside > .chart { height: clamp(380px, calc(100vh - 196px), 760px); }
+  #lview .card.lright > .chart, #lview .card.lright > #lent-chart { height: auto; flex: 1 1 0; min-height: 300px; }
+  #lview .card.lside .chart.split > .chart { height: clamp(300px, calc((100vh - 220px) / 2), 600px); }
+}
+/* both boxes and several islands: one panel per island */
+.chart.split { height: auto !important; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 8px; }
+.card.time .chart.split > .chart { height: min(max(380px, 46vh), 600px); }
+.card.late .chart.split > .chart { height: min(max(340px, 38vh), 520px); }
+.grid { display: grid; gap: 8px; min-width: 0; }
+.grid .cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.gsec { grid-column: 1 / -1; font-weight: 650; font-size: 14px; padding: 6px 2px 0; }
+.mini { height: clamp(230px, calc((100vh - 214px) / 2), 420px); background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); min-height: 0; min-width: 0; display: flex; flex-direction: column; padding: 4px 4px 2px; }
+.mini .chart { flex: 1 1 auto; min-height: 0; }
+.bottom { padding: 6px 14px 10px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2px 28px; border-top: 1px solid var(--line); }
+.bottom details { min-width: 0; }
+.bottom details[open] { flex-basis: 100%; }
+@media (max-width: 900px) {
+  .stage { padding: 0 12px 10px; }
+  .bar { position: static; }
+  .top .settings { margin-left: 0; white-space: normal; }
+  .card.time > .chart, .card.order > .chart { height: 340px; }
+  .mini { height: 270px; }
+}
+
+.blk { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 7px; min-width: 0; }
+/* the menu: the box and the island drawn, and the comparisons of October */
+.menuwrap { position: relative; margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.menubtn { font: inherit; font-size: 13.5px; line-height: 1.15; min-height: 34px; padding: 6px 10px 6px 12px; border-radius: 7px; border: 1px solid var(--axis); background: var(--surface); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; text-align: left; }
+.menubtn:hover, .menubtn[aria-expanded="true"] { border-color: var(--ink-2); }
+.menubtn .caret { width: 9px; height: 9px; flex: none; }
+.menubtn.changed { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: min(318px, calc(100vw - 24px)); max-height: calc(100vh - 70px); overflow-y: auto; background: var(--surface); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,0.2), 0 0 0 1px var(--line); padding: 11px 12px 10px; display: grid; gap: 11px; }
+.menu .blk { display: grid; gap: 5px; }
+.menu .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.linkbtn { font: inherit; font-size: 13.5px; padding: 3px 0; border: 0; background: none; color: var(--accent); cursor: pointer; }
+.linkbtn:disabled { color: var(--muted); cursor: default; }
+.lab { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.q { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--axis); font-size: 11px; color: var(--muted); cursor: help; text-transform: none; letter-spacing: 0; position: relative; }
+.q::after { content: ""; position: absolute; inset: -2px; }
+.q:hover, .q.on, .q:focus-visible { color: var(--ink); border-color: var(--ink-2); }
+/* explanations (data-tip): on hover, on keyboard focus, or pinned by a click on a "?" */
+.pop { position: fixed; z-index: 60; max-width: 320px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,0.18), 0 0 0 1px var(--line); border-radius: 6px; padding: 7px 10px; font-size: 13.5px; line-height: 1.4; white-space: pre-line; pointer-events: none; }
+.pop.pinned { pointer-events: auto; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; background: var(--surface-2); padding: 2px; border-radius: 7px; }
+.seg button {
+  font: inherit; font-size: 13.5px; line-height: 1; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--ink-2);
+  cursor: pointer; font-variant-numeric: tabular-nums; min-height: 30px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+}
+.seg button:hover { color: var(--ink); background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-weight: 700; }
+.seg button:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.6; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+/* boxes and islands: one per row; square marks for toggles, round ones for the presets */
+#route-picks.chips, #rule-picks.chips { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+#route-picks .chip, #rule-picks .chip { width: 100%; }
+#route-picks .chip::before, #rule-picks .chip::before { border-radius: 3px; }
+.chip {
+  font: inherit; font-size: 13.5px; line-height: 1.15; padding: 5px 11px 5px 8px; border-radius: 999px; border: 1px solid var(--axis);
+  background: var(--surface); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-align: left;
+}
+.chip::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--axis); flex: none; }
+.chip:hover { border-color: var(--ink-2); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip[aria-pressed="true"]::before { border-color: var(--bg); background: var(--bg); box-shadow: inset 0 0 0 2.5px var(--ink); }
+.chip kbd { border-color: transparent; background: transparent; color: inherit; opacity: 0.6; padding: 0; }
+.seg.view { gap: 3px; padding: 3px; border-radius: 9px; }
+.seg.view button { justify-content: center; font-size: 15px; min-height: 34px; padding: 6px 14px; border-radius: 6px; }
+.seg.view button[aria-pressed="true"] { color: var(--accent); }
+.presets .chip { color: var(--ink); }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.check.off { opacity: 0.4; cursor: default; }
+.opts { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
+.keys { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.hint { font-size: 12.5px; color: var(--muted); }
+
+/* chart cards */
+.card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px 10px 6px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.card .head { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 14px; margin: 0 0 4px; font-size: 13.5px; }
+.card .head h2 { font-size: 15.5px; font-weight: 700; margin: 0 6px 0 0; }
+.card .head .opts { margin-left: auto; }
+.card .head .seg button { min-height: 26px; padding: 4px 9px; font-size: 13px; }
+.legend { display: inline-flex; flex-wrap: wrap; gap: 3px 12px; color: var(--ink-2); }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.nscale { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); margin-left: auto; }
+.nscale svg { display: block; overflow: visible; }
+.nscale text { font-family: var(--font-body); font-size: 11.5px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chart { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.chart text { font-family: var(--font-body); font-size: 13.5px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chart .axis-title { font-size: 14px; fill: var(--ink); }
+.chart .ptitle { font-size: 13px; fill: var(--ink); font-weight: 700; }
+.chart .ptitle .pnote { fill: var(--muted); font-weight: 400; }
+.chart .grid-line { stroke: var(--line); stroke-width: 1; }
+.chart .grid-line.minor { opacity: 0.55; }
+.chart .axis { stroke: var(--axis); stroke-width: 1; }
+.chart .ref-line { stroke: var(--axis); stroke-width: 1.5; }
+.chart .ref-label { font-size: 12.5px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.chart .cross { stroke: var(--ink-2); stroke-width: 1; opacity: 0.6; pointer-events: none; }
+.chart .endlabel { font-size: 12.5px; fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.chart .endlabel.muted { fill: var(--muted); }
+.chart .leader { stroke-width: 1; }
+.chart .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; text-align: center; padding: 10px; }
+.caption { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caption:empty { display: none; }
+.tablewrap { overflow: auto; max-width: 100%; max-height: 40vh; }
+table.data { border-collapse: collapse; font-size: 13.5px; margin: 4px 0; font-variant-numeric: tabular-nums; }
+table.data th, table.data td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.data th { color: var(--muted); font-weight: 400; font-size: 11.5px; position: sticky; top: 0; background: var(--surface); }
+table.data th:first-child, table.data td:first-child, table.data th.l, table.data td.l { text-align: left; }
+table.data td.dim { color: var(--muted); }
+table.data td.strong { font-weight: 700; }
+
+/* tooltip */
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,0.18), 0 0 0 1px var(--line); border-radius: 6px; padding: 6px 9px; font-size: 13.5px; max-width: min(440px, calc(100vw - 16px)); }
+.tip .t { color: var(--muted); font-size: 12.5px; margin-bottom: 3px; }
+.tip .row { display: flex; align-items: center; gap: 7px; line-height: 1.45; white-space: nowrap; }
+.tip .row .v { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
+.tip .row .l { color: var(--ink-2); white-space: normal; }   /* wraps only on a narrow screen */
+
+/* bottom folds */
+details.fold summary { cursor: pointer; font-size: 14px; color: var(--ink-2); padding: 3px 0; font-weight: 700; }
+details.fold summary:hover { color: var(--ink); }
+details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
+.defs { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; max-width: 120ch; }
+.defs dt { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.defs dd { margin: 0; }
+@media (max-width: 600px) { .defs { grid-template-columns: 1fr; } .defs dd { margin-bottom: 4px; } }
+.findings ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; max-width: 110ch; }
+.banner { margin: 8px 14px; padding: 8px 12px; border-radius: var(--radius); background: var(--surface); border-left: 4px solid #d03b3b; color: var(--ink); font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { .seg button, .chip { transition: background-color 100ms, color 100ms, border-color 100ms; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Island study</h1>
+    <span class="line">Island density and spatial entropy against step, one curve per N; late island density against N and L.</span>
+    <span class="settings">boson · polar · β = 6 · field: site + 6 nb ÷ M<sup>α</sup> · periodic</span>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="bar" id="rail" role="group" aria-label="controls">
+      <div class="seg view" id="view-seg" role="group" aria-label="view"></div>
+      <div class="blk" id="dim-alpha">
+        <span class="lab"><span style="text-transform: none; font-size: 14px">α</span> <span class="q" id="q-alpha" tabindex="0" role="button" aria-label="about alpha" data-tip="Alignment exponent: the field is divided by M^α, where M is the number of particles at the site and its six neighbours. 0 = sum (crowding strengthens alignment), 1 = average.">?</span></span>
+        <div class="seg" id="alpha-seg" role="group" aria-label="alpha"></div>
+        <span class="hint" id="alpha-hint"></span>
+      </div>
+      <div class="blk" id="dim-step" hidden>
+        <span class="lab">Step <span class="q" id="q-step" tabindex="0" role="button" aria-label="about the step" data-tip="Every box is compared at the same step. The value is the mean over the last quarter of the run up to that step: for step 80k, steps 60.1k to 80k. A box whose runs stop before the step has no point. The spatial entropy uses the lattices saved in those steps, one every 20k: at step 80k the one at 80k, at step 320k those at 260k to 320k.">?</span></span>
+        <div class="seg" id="step-seg" role="group" aria-label="step"></div>
+      </div>
+      <div class="blk" id="dim-axis">
+        <span class="lab">Step axis</span>
+        <div class="seg" id="axis-seg" role="group" aria-label="step axis"></div>
+      </div>
+      <div class="menuwrap" id="menuwrap">
+        <span class="keys">keys <span class="q" id="q-keys" tabindex="0" role="button" aria-label="keyboard shortcuts">?</span></span>
+        <button type="button" class="menubtn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu"></button>
+        <div class="menu" id="menu" hidden>
+          <div class="blk" id="dim-rule">
+            <span class="lab">Island <span class="q" id="q-rule" tabindex="0" role="button" aria-label="about the island">?</span></span>
+            <div id="rule-picks"></div>
+          </div>
+          <div class="blk" id="dim-route">
+            <span class="lab">Box <span class="q" id="q-route" tabindex="0" role="button" aria-label="about the boxes">?</span></span>
+            <div id="route-picks"></div>
+            <div class="opts" id="route-opts"></div>
+            <div class="opts" id="alpha-opts"></div>
+          </div>
+          <div class="blk" id="dim-presets">
+            <span class="lab">October comparisons</span>
+            <div class="presets" id="presets" role="group" aria-label="presets"></div>
+          </div>
+          <div class="foot"><span class="hint" id="menu-state"></span><button type="button" class="linkbtn" id="menu-reset">Reset</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts" id="charts">
+      <section class="card time" id="time">
+        <div class="head"><h2 id="time-title">Island density over time</h2><div class="legend" id="time-legend"></div><div class="nscale" id="time-nscale"></div></div>
+        <div class="chart" id="time-chart"></div>
+        <p class="caption" id="time-caption"></p>
+      </section>
+      <section class="card order" id="order">
+        <div class="head"><h2 id="order-title">Spatial entropy</h2><span class="q" id="q-order" tabindex="0" role="button" aria-label="about the spatial entropy">?</span><div class="legend" id="order-legend"></div><div class="opts" id="order-opts"></div></div>
+        <div class="chart" id="order-chart"></div>
+        <p class="caption" id="order-caption"></p>
+      </section>
+      <section class="card late" id="late">
+        <div class="head"><h2 id="late-title">Late island density against N</h2><div class="legend" id="late-legend"></div><div class="nscale" id="late-nscale"></div></div>
+        <div class="chart" id="late-chart"></div>
+        <p class="caption" id="late-caption"></p>
+      </section>
+    </div>
+    <div class="grid" id="gridview" hidden>
+      <div class="card" style="padding: 6px 10px"><div class="head"><h2 id="grid-title">Island density over time, every α</h2><div class="seg" id="grid-seg" role="group" aria-label="quantity"></div><div class="legend" id="grid-legend"></div><div class="nscale" id="grid-nscale"></div></div><p class="caption" id="grid-caption"></p></div>
+      <div class="cells" id="grid-cells"></div>
+    </div>
+    <div class="charts" id="lview" hidden>
+      <section class="card lside" id="lside">
+        <div class="head"><h2 id="lside-title">Late island density against L</h2><div class="legend" id="lside-legend"></div><div class="nscale" id="lside-nscale"></div></div>
+        <div class="chart" id="lside-chart"></div>
+        <p class="caption" id="lside-caption"></p>
+        <div class="hint" id="lside-missing" hidden></div>
+      </section>
+      <section class="card lright" id="lright">
+        <div class="head"><h2 id="lright-title">Spatial entropy against α</h2><span class="q" id="q-lright" tabindex="0" role="button" aria-label="about this chart">?</span><div class="legend" id="lright-legend"></div><div class="opts"><div class="seg" id="lright-seg" role="group" aria-label="chart: spatial entropy or slope"></div></div></div>
+        <div class="chart" id="lent-chart"></div>
+        <div class="chart" id="slope-chart" hidden></div>
+        <p class="caption" id="lright-caption"></p>
+        <div class="hint" id="lright-missing" hidden></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div id="load-error" hidden></div>
+    <details class="fold" id="numbers-fold"><summary>Numbers: late values in the chart</summary><div class="body"><div class="tablewrap" id="late-numbers"></div></div></details>
+    <details class="fold" id="defs-fold"><summary>Definitions &amp; notes</summary><div class="body"><dl class="defs" id="defs-body"></dl></div></details>
+    <details class="fold" id="findings-fold"><summary>Notes from the runs</summary><div class="body findings" id="findings-slot" aria-live="polite"></div></details>
+  </div>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+<div class="pop" id="pop" hidden role="tooltip"></div>
+
+<!-- the notes at the bottom of the page: [{"title": ..., "text": ...}, ...] -->
+<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over steps 60,100 to 80,000, the new island's density grows 6.4 to 68 times, the old cluster's 5.0 to 41 times and the densest island's 7.5 to 93 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. At L 720, run at four α, the density is higher again: 1.04 to 1.68 times that at L 480 for every island definition. The values are in the data files."}, {"title": "At α 0 and 0.5 the new island's density changes by less than 4% from step 80,000 to 320,000.", "text": "Between the late values at steps 80,000 and 320,000 the seed mean changes by −3.7% to +1.3% in L 60 to 480, and by at most 2.3% over one doubling. At α 0.5 every box ran on to step 1,280,000: from step 320,000 the density changes by at most 1.2% in L 60 to 240 and falls by 4.7% in L 360 and 4.0% in L 480, where in four of the eight runs the island covers one or two more sites with the same particles. At α 0.8 over the same steps it changes by +9% to +56% in L 60 to 360, but by +0.3% in L 480 and −3% in L 720, and those two rose later (see Limits). In 55 of the 66 runs at α 0 and 0.5 the busiest site holds the same number of particles at every sample from step 5,000 to 320,000 (in the others it changes by 1 or 2), while the pile that holds them moves across the box."}, {"title": "At α 0.8 the new island's density rises in every box over the last doubling, later in bigger boxes.", "text": "All eight boxes, L 60 to 720, ran to step 1,280,000. Over the doubling to 1,280,000 it rises by 17% in L 60, 23% in L 90, 27% in L 120, 20% in L 180, 9.5% in L 240, 6% in L 360, 8% in L 480 and 4% in L 720 (all seeds up in 6 of the 8 boxes). The rise starts later in bigger boxes: over the doubling to 160,000 it is 31% in L 60 and 19% in L 90, but 5% to 10% in L 120 to 360; L 480 changes by less than 1% over each doubling to 640,000, and L 720 by −5%, +2% and +2%. At step 1,280,000 the island holds 76% of N in L 60, 41% in L 90, 21% in L 120, 18% in L 180, 13% in L 240, 9% in L 360, 5% in L 480 and 6% in L 720."}, {"title": "At α 0.85 the new island's density is still rising at step 1,280,000.", "text": "Every box from L 60 to 480 ran to step 1,280,000. Over the last doubling the density rises by 25% in L 90 (4 of 5 seeds up), 39% in L 120 (5 of 5), 23% in L 180 (4 of 5), 59% in L 240 (5 of 5), 62% in L 360 (4 of 4) and 49% in L 480 (4 of 4). In the three largest boxes it has risen over every doubling since step 80,000: L 240 by 41%, 66%, 74% and 59%, L 360 by 33%, 51%, 74% and 62%, L 480 by 16%, 35%, 81% and 49% (all seeds up each time, except 3 of 4 in L 480's first doubling). The island holds a growing share of N: at step 1,280,000, 92% in L 90, 67% in L 120, 75% in L 180, 38% in L 240, 26% in L 360 and 14% in L 480. L 60 moves without a trend, between 41 and 67 over the windows from step 160,000 on, with the island holding 73% to 79% of N."}, {"title": "At α 0.88 to 0.96 the longer runs rise in some boxes and fall in others.", "text": "Over the 128 doublings after step 80,000 in L 90 to 720, the new island's density changes by −56% to +233% (seed means, relative to the earlier window), and in 114 of them the seeds split. Where all seeds move the same way, the next doubling can go the other way: at α 0.9, L 240 falls 50% to step 640,000 (0 of 5 seeds up), then rises 98% to 1,280,000 (4 of 5 up); at α 0.94, L 360 falls 28% to 160,000 (0 of 4 up), then rises 36% to 320,000 (4 of 4 up); at α 0.92, L 480 falls 43% to 160,000 (0 of 4 up), rises 7% and 24% to 640,000 (3 and 4 of 4 up), then changes by −4% to 1,280,000 (1 of 4 up). At α 0.96, L 360 falls 9% to 640,000, then rises 24% to 1,280,000 (3 of 4 seeds up). In L 60 the island holds all but a few particles, spread over most of the box."}, {"title": "Against the box side, the slope at α 0.8 and 0.85 changes with the step.", "text": "Slope of ln(density) against ln(L) in the vs L view, new island. At α 0.8 (8 boxes, L 60 to 720) it falls: 1.10 ± 0.07 at step 80,000, 0.99 ± 0.08 at 160,000, 0.90 ± 0.06 at 320,000, 0.80 ± 0.06 at 640,000 and 0.73 ± 0.05 at 1,280,000, because the smaller boxes rise more (from step 80,000 to 1,280,000, +132% in L 60 and +2% in L 720). At α 0.85 it rises: 0.93 ± 0.10 at step 80,000, 1.13 ± 0.32 at 320,000, 1.30 ± 0.26 at 640,000 and 1.52 ± 0.30 at 1,280,000 (7 boxes, L 60 to 480). There the points do not lie on one line: at step 1,280,000 the slope is 2.7 over L 60 to 180 and 0.3 over L 180 to 480. At α 0 and 0.5 (7 boxes) it is 1.15 ± 0.07 and 1.16 ± 0.12 at step 320,000, within 0.01 of step 80,000. At α 0.5 it is 1.15 ± 0.12 at step 640,000 and 1.14 ± 0.12 at 1,280,000 (the same 7 boxes)."}, {"title": "From step 5,000 to 320,000, ln A − S changes little at α 0 and 0.5; at α 0.8 it rises to the end of the runs.", "text": "In all 66 runs at α 0 and 0.5, a run's highest and lowest ln A − S differ by at most 0.028 between steps 5,000 and 320,000, and by at most 0.017 between 80,000 and 320,000. All 33 runs at α 0.5 ran on to step 1,280,000: at most 0.038 from step 5,000 and 0.028 from step 80,000. At α 0.8, ln A − S rises in every run over steps 20,000 to 80,000, by 0.14 to 0.70 in L 60 and by 0.02 to 0.04 in L 720, and in every run over every doubling after that, to step 1,280,000: its seed mean goes from 4.20 to 5.27 in L 60 and from 6.18 to 6.37 in L 720. So while the island density at α 0.8 changed little near step 80,000, and in L 480 to step 640,000, the particles were gathering."}, {"title": "At α 0.85 the particles keep gathering to step 1,280,000, except in L 60.", "text": "In L 90 to 480 the seed mean of ln A − S rises over every doubling from step 80,000 to 1,280,000, where it is 5.99, 6.48, 7.45, 7.37, 7.50 and 7.38. Over the last doubling it rises by 0.29 to 0.54 (every seed up, except 3 of 5 in L 120). In L 60 three seeds end near 5.0 and two at 0.29, evenly spread."}, {"title": "Some runs spread out evenly again, among them every run in L 60 at α ≥ 0.88.", "text": "At their last saved step, 43 runs have ln A − S between 0.24 and 0.29 (the random start is at 0.14 to 0.15), and no run is between 0.3 and 0.8: at that step a run is either evenly spread or gathered. Evenly spread are every run in L 60 at α 0.88 to 1 (30 runs), 2 of 5 in L 60 at α 0.85, and in L 90 1 of 5 at α 0.92 and at α 0.94, 4 of 5 at α 0.96, and all 5 at α 1; no run in L 120 or larger, and none at α ≤ 0.8. A run can change between two saved lattices: at α 0.88, L 60, one seed's ln A − S goes from 3.13 at step 20,000 to 0.35 at step 40,000, and is at 0.25 to 0.28 at every later saved step, to step 1,280,000. The change can come late: two L 90 seeds at α 1 spread out by the saves at 460,000 and 700,000. At α 1 in L 720, all four seeds still show spatial concentration at step 1,280,000 (ln A − S from 2.33 to 2.70). The seed mean hides this; turn on single seeds."}, {"title": "At a fixed step, ln A − S falls with α, later in bigger boxes.", "text": "In the vs L view the right-hand card shows ln A − S against α at the chosen step, one line per box (its switch brings back the slope). At step 320,000 it is 3.8 to 6.2 for α ≤ 0.8 in every box; every box from L 90 to 360 has its highest value at α 0.85 (5.5 to 6.7), and L 480 at α 0.88 (7.6). It is below 3 from α 0.88 in L 90 and 120 and from α 0.92 in L 180 to 480; at step 80,000, from α 0.9 in L 180 and from 0.94 in L 480. The value 3 is only a marker: in the bigger boxes ln A − S falls gradually with α."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 0.9 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved from step 5,000 to 80,000, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 89% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are changes over finite times in finite boxes, not limiting densities. A setting that changes little over one doubling can still move over the next: at α 0.8, L 480 changes by less than 1% over each doubling to step 640,000, then by +8% to 1,280,000 (4 of 4 seeds up); at α 0.9, L 120 changes by +2% to step 320,000 and by +16% to 640,000 (4 of 5 seeds up). Every larger-box setting reaches 1,280,000, except α 0, which reaches 320,000. The spatial entropy comes from the saved lattices, one every 20,000 steps after step 20,000: a faster change is not resolved, and it is computed for the larger box only."}]</script>
+<script id="page-data" type="application/json"></script>
+<!-- the spatial entropy of every saved lattice of the larger box (build/entropy.py): {"entries": [...]} -->
+<script id="entropy-data" type="application/json"></script>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- boxes and islands ---------- */
+const CUT = 20000;                 // the denser-box runs end here; the default chart limit
+const MATCH_RATIO = 1.25;          // two N are "matched" when they differ by less than this factor
+const ROUTES = {
+  density: { label: "Denser 90 × 90 box", chip: "Denser 90×90", short: "denser box",
+             def: "90 × 90 box, 0.15 to 14.4 particles per site (N = 1.2k to 117k), to step 20,000; 25 α; 4 to 5 seeds." },
+  size:    { label: "Larger box, 2.4 per site", chip: "Larger box", short: "larger box",
+             def: "2.4 particles per site, side L = 60 to 480 (N = 8.6k to 553k); L = 720 (1.24M) at α = 0.8, 0.9, 0.94, 1; 10 α; 5 seeds to L 240, 4 above." },
+};
+const ROUTE_ORDER = ["density", "size"];
+const DRAW_ORDER = ["size", "density"];           // the denser box on top
+const RULES = {
+  old:     { label: "old", chip: "old", short: "old", key: "rhoOld",
+             def: "Among connected sets of sites holding at least twice the mean occupation, max(1, ⌈2N/A⌉) particles (A = number of sites), the one with the most particles. Every sample step." },
+  busiest: { label: "new", chip: "new", short: "new", key: "rho",
+             def: "The island containing the site with the most particles: every occupied site connected to it. Every sample step." },
+  densest: { label: "densest", chip: "densest", short: "densest", key: "rhoDensest",
+             def: "Of all islands (each a whole group of connected occupied sites), the one with the most particles per site (particles ÷ sites). Every sample step.",
+             caveat: "A lone site counts as an island: in the saved lattices, at α ≤ 0.75 it is then a pile of 14 to 3,940 particles; at α ≥ 0.83 it is sometimes a lone site with 2 to 7 particles." },
+};
+const RULE_ORDER = ["old", "busiest", "densest"];
+
+/* ---------- small helpers ---------- */
+const $ = (id) => document.getElementById(id);
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k === "style" && typeof v === "object") for (const [p, val] of Object.entries(v)) { if (p.startsWith("--")) el.style.setProperty(p, val); else el.style[p] = val; }
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) if (c != null) el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  return el;
+}
+function s(tag, attrs, ...children) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v);
+  }
+  for (const c of children.flat()) if (c != null) el.append(c);
+  return el;
+}
+const uniq = (arr) => [...new Set(arr)].sort((a, b) => a - b);
+const isNum = (v) => typeof v === "number" && isFinite(v);
+function fmt(v, sig = 3) {
+  if (!isNum(v)) return "–";
+  const a = Math.abs(v);
+  if (a >= 1000) return Math.round(v).toLocaleString("en-US");
+  if (a >= 100) return v.toFixed(0);
+  if (a >= 10) return v.toFixed(1);
+  if (a >= 1) return v.toFixed(2);
+  if (a === 0) return "0";
+  return String(+v.toPrecision(sig));
+}
+function fmtN(v) {
+  if (!isNum(v)) return "–";
+  if (v >= 1e6) return +(v / 1e6).toPrecision(3) + "M";
+  if (v >= 1e3) return +(v / 1e3).toPrecision(3) + "k";
+  return String(Math.round(v));
+}
+function fmtStep(v) { if (!isNum(v)) return "–"; if (v >= 1e6) return +(v / 1e6).toFixed(2) + "M"; if (v >= 1000) return +(v / 1000).toFixed(1) + "k"; return String(v); }
+const listOr = (arr) => arr.length > 1 ? arr.slice(0, -1).join(", ") + " or " + arr[arr.length - 1] : String(arr[0] ?? "");
+const listAnd = (arr) => arr.length > 1 ? arr.slice(0, -1).join(", ") + " and " + arr[arr.length - 1] : String(arr[0] ?? "");
+function fmtTick(v) {
+  if (v >= 1e6) return +(v / 1e6).toPrecision(3) + "M";
+  if (v >= 1e3) return +(v / 1e3).toPrecision(3) + "k";
+  if (v >= 1) return String(+v.toPrecision(3));
+  return String(+v.toPrecision(2));
+}
+const fmtDens = (perSite) => String(+perSite.toPrecision(3));
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function hexToRgb(hex) { const n = parseInt(hex.replace("#", ""), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function mix(hexA, hexB, t) { const a = hexToRgb(hexA), b = hexToRgb(hexB); return "rgb(" + a.map((x, i) => Math.round(x + (b[i] - x) * t)).join(",") + ")"; }
+function rampColor(stops, t) { t = Math.max(0, Math.min(1, t)); const k = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(k)); return mix(stops[i], stops[i + 1], k - i); }
+
+/* ---------- colour = N ---------- */
+let nStops = [];
+function refreshStops() { nStops = [0, 1, 2, 3, 4, 5, 6].map((i) => cssVar("--N" + i) || "#888"); }
+function nT(N) { return (Math.log10(N) - Math.log10(model.Nmin)) / (Math.log10(model.Nmax) - Math.log10(model.Nmin) || 1); }
+function nColor(N) { return rampColor(nStops, nT(N)); }
+
+/* ---------- line samples: style = { width, dash, markers, shape, hollow, endMarker } ---------- */
+function markerPath(shape, cx, cy, r) {
+  if (shape === "diamond") { const d = r * 1.25; return s("path", { d: "M" + cx + " " + (cy - d) + "L" + (cx + d) + " " + cy + "L" + cx + " " + (cy + d) + "L" + (cx - d) + " " + cy + "Z" }); }
+  return s("circle", { cx, cy, r });
+}
+function glyph(style, color) {
+  const svg = s("svg", { class: "glyph", viewBox: "0 0 30 12", "aria-hidden": "true" });
+  const w = style.width || 2.4;
+  if (style.endMarker) {          // a box: its line weight and, at the end, its marker
+    svg.append(s("line", { x1: 1, x2: 20, y1: 6, y2: 6, style: "stroke:" + color + ";stroke-width:" + w + ";stroke-linecap:round" }));
+    const mk = markerPath("circle", 25.5, 6, 3.3); mk.setAttribute("style", "fill:" + (style.hollow ? "none" : color) + ";stroke:" + color + ";stroke-width:" + (style.hollow ? 1.5 : 0)); svg.append(mk);
+  } else if (style.markers) {
+    const ls = "stroke-width:" + Math.min(w, 2) + ";opacity:0.75;stroke-linecap:round" + (style.dash ? ";stroke-dasharray:" + style.dash : "");
+    svg.append(s("line", { x1: 1, x2: 29, y1: 6, y2: 6, style: "stroke:" + color + ";" + ls }));
+    for (const cx of [5, 15, 25]) { const mk = markerPath(style.shape, cx, 6, 3.4); mk.setAttribute("style", "fill:" + (style.hollow ? "none" : color) + ";stroke:" + color + ";stroke-width:" + (style.hollow ? 1.5 : 0)); svg.append(mk); }
+  } else {
+    svg.append(s("line", { x1: 1, x2: 29, y1: 6, y2: 6, style: "stroke:" + color + ";stroke-width:" + w + ";stroke-linecap:round" + (style.dash ? ";stroke-dasharray:" + style.dash : "") }));
+  }
+  return svg;
+}
+
+/* ---------- tooltip ---------- */
+const tip = $("tip");
+function showTip(ev, title, rows) {
+  tip.replaceChildren();
+  if (title) tip.append(h("div", { class: "t", text: title }));
+  for (const r of rows) {
+    const row = h("div", { class: "row" });
+    if (r.style) row.append(glyph(r.style, r.color));
+    row.append(h("span", { class: "v", text: r.value }));
+    if (r.label) row.append(h("span", { class: "l", text: r.label }));
+    tip.append(row);
+  }
+  tip.hidden = false; moveTip(ev);
+}
+function moveTip(ev) {
+  const pad = 14, w = tip.offsetWidth, hh = tip.offsetHeight;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
+  if (y + hh > window.innerHeight - 8) y = Math.max(4, window.innerHeight - hh - 8);
+  tip.style.left = Math.max(4, x) + "px"; tip.style.top = Math.max(4, y) + "px";
+}
+function hideTip() { tip.hidden = true; }
+
+/* ---------- scales & ticks ---------- */
+function makeScale(type, domain, range, knots) {
+  const [d0, d1] = domain, [r0, r1] = range;
+  let f;
+  if (type === "log") {
+    const l0 = Math.log10(d0), l1 = Math.log10(d1);
+    f = (v) => r0 + (Math.log10(v) - l0) / (l1 - l0) * (r1 - r0);
+    f.ticks = (compact) => logTicks(d0, d1, compact);
+  } else if (knots) {
+    // knots [[value, position], ...]: linear between neighbouring knots, each stretch with its own scale (the
+    // axis then needs its ticks given and a break mark where the scale changes)
+    const warp = (v) => { let i = 0; while (i < knots.length - 2 && v > knots[i + 1][0]) i++; const [a0, u0] = knots[i], [a1, u1] = knots[i + 1]; return u0 + (v - a0) / (a1 - a0) * (u1 - u0); };
+    const w0 = warp(d0), w1 = warp(d1);
+    f = (v) => r0 + (warp(v) - w0) / (w1 - w0) * (r1 - r0);
+    f.ticks = () => ({ major: knots.map(([v]) => v), minor: [] });
+  } else {
+    f = (v) => r0 + (v - d0) / (d1 - d0) * (r1 - r0);
+    f.ticks = (compact) => linearTicks(d0, d1, compact ? 3 : 5);
+  }
+  f.type = type; f.domain = domain;
+  return f;
+}
+function logTicks(d0, d1, compact) {
+  const e0 = Math.floor(Math.log10(d0)), e1 = Math.ceil(Math.log10(d1));
+  const decades = Math.log10(d1) - Math.log10(d0);
+  const major = [], minor = [];
+  for (let e = e0; e <= e1; e++) for (let m = 1; m < 10; m++) {
+    const v = +(m * Math.pow(10, e)).toPrecision(12);
+    if (v < d0 || v > d1) continue;
+    if (m === 1 || (!compact && ((m === 2 || m === 5) && decades <= 2.6)) || (!compact && m === 3 && decades <= 1)) major.push(v); else minor.push(v);
+  }
+  if (major.length < 2) { major.push(...minor.filter((v, i) => compact ? [2, 5].includes(Math.round(v / Math.pow(10, Math.floor(Math.log10(v))))) : true)); minor.length = 0; major.sort((a, b) => a - b); }
+  return { major, minor };
+}
+function linearTicks(d0, d1, n = 5) {
+  const span = d1 - d0 || 1;
+  const base = Math.pow(10, Math.floor(Math.log10(span / n)));
+  const step = [1, 2, 2.5, 5, 10].map((k) => k * base).find((st) => span / st <= n * 1.5) || 10 * base;
+  const major = [];
+  for (let v = Math.ceil(d0 / step - 1e-9) * step; v <= d1 + 1e-9; v += step) major.push(+v.toFixed(10));
+  return { major, minor: [] };
+}
+function padDomain(lo, hi, type, f) {
+  if (type === "log") {
+    lo = Math.max(lo, 1e-9);
+    if (hi <= lo) return [lo / 3, lo * 3];
+    const a = Math.log10(lo), b = Math.log10(hi), p = Math.max((b - a) * f, 0.04);
+    return [Math.pow(10, a - p), Math.pow(10, b + p)];
+  }
+  if (hi <= lo) { const w = Math.abs(lo) * 0.5 || 1; return [lo >= 0 && lo - w < 0 ? 0 : lo - w, lo + w]; }
+  const p = (hi - lo) * f;
+  return [lo >= 0 && lo - p < 0 ? 0 : lo - p, hi + p];
+}
+
+/* ---------- the line chart ----------
+   spec: { x: {type, label, domain?, ticks?}, y: {type, label, domain?, minChars?}, compact, title, titleNote, aria, emptyText,
+           refs: [{y, label}],
+           series: [{ color, points: [[x, y]], width, opacity, dash, markers, shape, hollow, line,
+                      markerColor(i), markerR, endMark, endLabel, endMuted, tipLabel, tipAt(x), noTip, style, tipRows(i),
+                      onPick(i) }],
+           ranges: [{x, lo, hi, color}], hover: "x" | "point", tipTitle(x), leaders } */
+function drawLineChart(host, spec) {
+  host.replaceChildren();
+  const compact = !!spec.compact;
+  const W = Math.max(compact ? 120 : 200, host.clientWidth || 800);
+  const measured = host.clientHeight;
+  const narrow = W < 560;
+  const H = measured >= (compact ? 60 : 120) ? measured : (narrow ? 340 : 460);
+  const hasEnd = !compact && spec.series.some((sr) => sr.endLabel);
+  const logX = spec.x.type === "log", logY = spec.y.type === "log";
+  const ok = (x, y) => isNum(x) && isNum(y) && (!logX || x > 0) && (!logY || y > 0);
+  const xs = [], ys = [];
+  for (const sr of spec.series) for (const [x, y] of sr.points) if (ok(x, y)) { xs.push(x); ys.push(y); }
+  for (const r of spec.ranges || []) { if (isNum(r.lo) && (!logY || r.lo > 0)) ys.push(r.lo); if (isNum(r.hi)) ys.push(r.hi); }
+  if (!xs.length) { host.append(h("div", { class: "empty", text: spec.emptyText || "No data." })); return; }
+  const xd = spec.x.domain || padDomain(Math.min(...xs), Math.max(...xs), spec.x.type, 0.03);
+  const yd = spec.y.domain || padDomain(Math.min(...ys), Math.max(...ys), spec.y.type, 0.07);
+  const yTick = fmtTick;
+  // the left margin fits the widest y label and the axis title
+  const yAll = logY ? logTicks(yd[0], yd[1], compact) : linearTicks(yd[0], yd[1], compact ? 3 : 5);
+  const labW = Math.max(2, spec.y.minChars || 0, ...yAll.major.map((v) => yTick(v).length)) * (compact ? 6.8 : 8.2);
+  const m = compact ? { top: 18, right: 8, bottom: 22, left: 10 + labW } : { top: spec.title ? 28 : 10, right: hasEnd ? (narrow ? 50 : 64) : 16, bottom: narrow ? 42 : 44, left: 28 + labW };
+  const pw = W - m.left - m.right, ph = H - m.top - m.bottom;
+  const X = makeScale(spec.x.type, xd, [m.left, m.left + pw], spec.x.knots);
+  const Y = makeScale(spec.y.type, yd, [m.top + ph, m.top]);
+  const svg = s("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": spec.aria || "" });
+  const gGrid = s("g"), gAxes = s("g"), gData = s("g"), gLabels = s("g"), gHover = s("g");
+  // tick labels never touch: decades first, then 2 and 5 where there is room
+  const isDecade = (v) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9;
+  const thin = (major, scale, minGap, log) => {
+    const kept = [], fits = (v) => kept.every((k) => Math.abs(scale(k) - scale(v)) >= minGap);
+    const pri = log ? major.filter(isDecade) : major, sec = log ? major.filter((v) => !isDecade(v)) : [];
+    for (const v of pri) if (fits(v)) kept.push(v);
+    for (const v of sec) if (fits(v)) kept.push(v);
+    return kept.sort((a, b) => a - b);
+  };
+  // x.ticks: the labelled values themselves (the box sides), instead of round numbers
+  const xt0 = spec.x.ticks ? { major: spec.x.ticks.filter((v) => v >= Math.min(...xd) && v <= Math.max(...xd)), minor: [] } : X.ticks(compact), yt0 = Y.ticks(compact);
+  const xt = { major: thin(xt0.major, X, compact ? 34 : (spec.x.minGap || 48), logX), minor: xt0.minor }, yt = { major: thin(yt0.major, Y, compact ? 15 : 17, logY), minor: yt0.minor };
+  if (!compact) {
+    for (const v of yt.minor) gGrid.append(s("line", { class: "grid-line minor", x1: m.left, x2: m.left + pw, y1: Y(v), y2: Y(v) }));
+    for (const v of xt.minor) gGrid.append(s("line", { class: "grid-line minor", y1: m.top, y2: m.top + ph, x1: X(v), x2: X(v) }));
+  }
+  for (const v of yt.major) {
+    gGrid.append(s("line", { class: "grid-line", x1: m.left, x2: m.left + pw, y1: Y(v), y2: Y(v) }));
+    gAxes.append(s("text", { x: m.left - 5, y: Y(v) + 3.5, "text-anchor": "end", style: compact ? "font-size:11.5px" : null, text: yTick(v) }));
+  }
+  for (const v of xt.major) {
+    gGrid.append(s("line", { class: "grid-line", y1: m.top, y2: m.top + ph, x1: X(v), x2: X(v) }));
+    gAxes.append(s("text", { x: X(v), y: m.top + ph + (compact ? 13 : 16), "text-anchor": "middle", style: compact ? "font-size:11.5px" : null, text: spec.x.knots ? String(v) : fmtTick(v) }));
+  }
+  // reference lines (refs): a stronger line across the plot at a value that means something, named at its left end
+  for (const r of spec.refs || []) {
+    if (!isNum(r.y) || r.y < Math.min(...yd) || r.y > Math.max(...yd)) continue;
+    gGrid.append(s("line", { class: "ref-line", x1: m.left, x2: m.left + pw, y1: Y(r.y), y2: Y(r.y) }));
+    if (r.label && !compact) gLabels.append(s("text", { class: "ref-label", x: m.left + 8, y: Y(r.y) - 5, text: r.label }));
+  }
+  gAxes.append(s("line", { class: "axis", x1: m.left, x2: m.left + pw, y1: m.top + ph, y2: m.top + ph }));
+  gAxes.append(s("line", { class: "axis", x1: m.left, x2: m.left, y1: m.top, y2: m.top + ph }));
+  // x.breaks: a cut in the x axis (two slanted strokes) where its scale changes
+  for (const b of spec.x.breaks || []) {
+    const x = X(b), y = m.top + ph;
+    gAxes.append(s("rect", { x: x - 5, y: y - 5, width: 10, height: 10, style: "fill:var(--surface)" }),
+      s("line", { x1: x - 6, y1: y + 5, x2: x - 1, y2: y - 5, style: "stroke:var(--muted);stroke-width:1.3" }), s("line", { x1: x + 1, y1: y + 5, x2: x + 6, y2: y - 5, style: "stroke:var(--muted);stroke-width:1.3" }));
+  }
+  if (!compact) {
+    gAxes.append(s("text", { class: "axis-title", x: m.left + pw / 2, y: H - 5, "text-anchor": "middle", "data-fit": pw, text: spec.x.label }));
+    gAxes.append(s("text", { class: "axis-title", transform: "translate(13 " + (m.top + ph / 2) + ") rotate(-90)", "text-anchor": "middle", "data-fit": ph, text: spec.y.label }));
+  }
+  if (spec.title) { const t = s("text", { class: "ptitle", x: m.left, y: compact ? 12 : 18, text: spec.title }); if (spec.titleNote) t.append(s("tspan", { class: "pnote", dx: 8, text: spec.titleNote })); gAxes.append(t); }
+  // seed-range bars
+  for (const r of spec.ranges || []) {
+    if (!ok(r.x, r.lo) || !ok(r.x, r.hi)) continue;
+    const x = X(r.x), y1 = Y(r.lo), y2 = Y(r.hi);
+    const st = "stroke:" + r.color + ";stroke-width:1.5;opacity:0.85";
+    gData.append(s("line", { x1: x, x2: x, y1, y2, style: st }), s("line", { x1: x - 4, x2: x + 4, y1, y2: y1, style: st }), s("line", { x1: x - 4, x2: x + 4, y1: y2, y2, style: st }));
+  }
+  // lines and markers
+  const ends = [], endMarks = [];
+  for (const sr of spec.series) {
+    const pts = [];
+    sr.points.forEach(([x, y], i) => { if (ok(x, y)) pts.push({ x, y, i }); });
+    if (!pts.length) continue;
+    const r = Math.min(compact ? 2.8 : (narrow ? 3.6 : 4.4), sr.markerR || Infinity);   // markerR: smaller markers
+    if (!sr.markers || sr.line) {
+      let d = "", pen = false;
+      for (const [x, y] of sr.points) { if (!ok(x, y)) { pen = false; continue; } d += (pen ? "L" : "M") + X(x).toFixed(1) + " " + Y(y).toFixed(1); pen = true; }
+      const style = "stroke:" + sr.color + ";stroke-width:" + (compact ? Math.max(1, (sr.width || 2) * 0.7) : (sr.width || 2)) + ";opacity:" + (sr.opacity ?? 1) + ";stroke-linejoin:round;stroke-linecap:round" + (sr.dash ? ";stroke-dasharray:" + (compact ? (sr.style && sr.style.mini) || "4 3" : sr.dash) : "");
+      gData.append(s("path", { d, fill: "none", style }));
+    }
+    if (sr.markers) for (const p of pts) {
+      const c = sr.markerColor ? sr.markerColor(p.i) : sr.color;
+      const mk = markerPath(sr.shape || "circle", X(p.x), Y(p.y), r);
+      mk.setAttribute("style", sr.hollow ? "fill:var(--surface);stroke:" + c + ";stroke-width:2" : "fill:" + c + ";stroke:var(--surface);stroke-width:1.2;opacity:" + (sr.opacity ?? 1));
+      gData.append(mk);
+    }
+    const last = pts[pts.length - 1];
+    if (sr.endMark) endMarks.push({ x: X(last.x), y: Y(last.y), color: sr.color, hollow: sr.hollow });
+    if (sr.endLabel && !compact) ends.push({ x: X(last.x), y: Y(last.y), y0: Y(last.y), text: sr.endLabel, mark: !!sr.endMark, color: sr.color, muted: !!sr.endMuted });
+  }
+  // a dot where a run ends (endMark), drawn after every curve so a curve that goes on cannot hide it
+  for (const e of endMarks) {
+    const mk = markerPath("circle", e.x, e.y, compact ? 2.6 : (narrow ? 3.4 : 4));
+    mk.setAttribute("style", e.hollow ? "fill:var(--surface);stroke:" + e.color + ";stroke-width:" + (compact ? 1.4 : 2) : "fill:" + e.color + ";stroke:var(--surface);stroke-width:1.2");
+    gData.append(mk);
+  }
+  // end labels: one per curve end, duplicates merged, overlapping ones pushed apart vertically
+  const gap = 15, labelW = 46, kept = [];
+  for (const e of ends) { const dup = kept.find((k) => k.text === e.text && Math.abs(k.x - e.x) < labelW && Math.abs(k.y0 - e.y0) < 6); if (!dup) kept.push(e); }
+  kept.sort((a, b) => a.y0 - b.y0);
+  for (let i = 0; i < kept.length; i++) { let y = kept[i].y0; for (let j = 0; j < i; j++) if (Math.abs(kept[j].x - kept[i].x) < labelW && y < kept[j].y + gap) y = kept[j].y + gap; kept[i].y = y; }
+  const over = kept.length ? Math.max(...kept.map((e) => e.y)) - (m.top + ph) : 0;
+  if (over > 0) for (const e of kept) e.y -= over;
+  // spec.leaders: each label sits a little further right, joined to its own curve end by a thin line in the
+  // curve's colour, so a label pushed away from its end does not seem to name the curve that ends beside it
+  const lead = spec.leaders ? (narrow ? 8 : 14) : 0;
+  for (const e of kept) {
+    const lx = e.x + (e.mark ? 9 : 6) + lead;
+    if (lead) gLabels.append(s("line", { class: "leader", x1: e.x + (e.mark ? 5 : 2), y1: e.y0, x2: lx - 2, y2: e.y, style: "stroke:" + e.color }));
+    gLabels.append(s("text", { class: e.muted ? "endlabel muted" : "endlabel", x: lx, y: e.y + 4, text: e.text }));
+  }
+  svg.append(gGrid, gAxes, gData, gLabels, gHover);
+  host.append(svg);
+  // an axis title longer than its plot side is squeezed to fit
+  for (const t of svg.querySelectorAll("text.axis-title[data-fit]")) {
+    const avail = +t.getAttribute("data-fit") - 6;
+    if (t.getComputedTextLength() > avail) { t.setAttribute("textLength", Math.max(10, avail)); t.setAttribute("lengthAdjust", "spacingAndGlyphs"); }
+  }
+  // hover
+  const cross = s("line", { class: "cross", y1: m.top, y2: m.top + ph, x1: 0, x2: 0 }); cross.style.display = "none";
+  const dotHi = s("circle", { r: 7, style: "fill:none;stroke:var(--ink);stroke-width:2" }); dotHi.style.display = "none";
+  gHover.append(cross, dotHi);
+  const tipSeries = spec.series.filter((sr) => !sr.noTip);
+  if (spec.hover === "x") {
+    const xset = uniq(tipSeries.flatMap((sr) => sr.points.filter(([x, y]) => ok(x, y)).map(([x]) => x)));
+    const px = xset.map((x) => X(x));
+    // every curve's value at exactly the hovered step (both boxes share their sample steps); none where a curve has no sample there
+    const valid = tipSeries.map((sr) => new Map(sr.points.filter(([x, y]) => ok(x, y))));
+    svg.addEventListener("pointermove", (ev) => {
+      const rc = svg.getBoundingClientRect(); const mx = (ev.clientX - rc.left) * (W / rc.width);
+      if (!px.length) return;
+      let lo = 0, hi = px.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (px[mid] < mx) lo = mid; else hi = mid; }
+      const i = Math.abs(px[lo] - mx) <= Math.abs(px[hi] - mx) ? lo : hi;
+      const xv = xset[i];
+      cross.setAttribute("x1", px[i]); cross.setAttribute("x2", px[i]); cross.style.display = "";
+      const rows = [];
+      tipSeries.forEach((sr, k) => { if (!valid[k].has(xv)) return; const y = valid[k].get(xv); rows.push({ color: sr.color, style: sr.style, value: fmt(y), label: sr.tipAt ? sr.tipAt(xv) : sr.tipLabel, y }); });
+      rows.sort((a, b) => b.y - a.y);
+      showTip(ev, (spec.tipTitle || ((x) => fmtTick(x)))(xv), rows);
+    });
+    svg.addEventListener("pointerleave", () => { cross.style.display = "none"; hideTip(); });
+  } else {
+    const pts = [];
+    tipSeries.forEach((sr) => sr.points.forEach(([x, y], k) => { if (ok(x, y)) pts.push({ x: X(x), y: Y(y), xv: x, yv: y, sr, k }); }));
+    const nearest = (ev) => {
+      const rc = svg.getBoundingClientRect(); const mx = (ev.clientX - rc.left) * (W / rc.width), my = (ev.clientY - rc.top) * (H / rc.height);
+      let best = null, bd = 30 * 30;
+      for (const p of pts) { const d = (p.x - mx) ** 2 + (p.y - my) ** 2; if (d < bd) { bd = d; best = p; } }
+      return best;
+    };
+    // sr.onPick: a click on (or near) one of the series' points calls it, as its buttons would
+    const pickable = tipSeries.some((sr) => sr.onPick);
+    if (pickable) svg.addEventListener("click", (ev) => { const best = nearest(ev); if (best && best.sr.onPick) { hideTip(); best.sr.onPick(best.k); } });
+    svg.addEventListener("pointermove", (ev) => {
+      const best = nearest(ev);
+      if (pickable) svg.style.cursor = best && best.sr.onPick ? "pointer" : "";
+      if (!best) { dotHi.style.display = "none"; hideTip(); return; }
+      dotHi.setAttribute("cx", best.x); dotHi.setAttribute("cy", best.y); dotHi.style.display = "";
+      const t = best.sr.tipRows ? best.sr.tipRows(best.k) : { title: best.sr.tipLabel, rows: [{ color: best.sr.color, value: fmt(best.yv) }] };
+      showTip(ev, t.title, t.rows);
+    });
+    svg.addEventListener("pointerleave", () => { dotHi.style.display = "none"; hideTip(); });
+  }
+}
+
+/* ---------- data model ---------- */
+function buildModel(data, entropyData) {
+  const size = data.size || { steps: [], entries: [] };
+  // spatial entropy of the larger box: "alpha|L" -> { steps, S: [per seed], mean }
+  const entropy = new Map(((entropyData && entropyData.entries) || []).map((e) => [e.alpha + "|" + e.L, e]));
+  const dens = data.density || { steps: [], entries: [] };
+  const entries = {
+    size: size.entries.map((e) => Object.assign({}, e, { route: "size", N: e.late.N, desc: "L " + e.L, descLong: "L = " + e.L + " (" + fmt(e.late.mean) + " per site)" })),
+    density: dens.entries.map((e) => Object.assign({}, e, { route: "density", N: e.N, desc: fmtDens(e.dens * 6) + " per site", descLong: fmtDens(e.dens * 6) + " particles per site (90 × 90)" })),
+  };
+  const steps = { size: size.steps, density: dens.steps };
+  const alphas = { size: uniq(entries.size.map((e) => e.alpha)), density: uniq(entries.density.map((e) => e.alpha)) };
+  const Ns = [...entries.size, ...entries.density].map((e) => e.N).filter(isNum);
+  return {
+    data, entries, steps, alphas, entropy,
+    Nmin: Ns.length ? Math.min(...Ns) : 1000, Nmax: Ns.length ? Math.max(...Ns) : 1e6,
+    entriesFor: (route, alpha) => entries[route].filter((e) => e.alpha === alpha).sort((a, b) => a.N - b.N),
+  };
+}
+function matchedPairs(alpha) {
+  const A = model.entriesFor("size", alpha), B = model.entriesFor("density", alpha), pairs = [];
+  for (const a of A) {
+    let best = null, bd = Infinity;
+    for (const b of B) { const d = Math.abs(Math.log(b.N / a.N)); if (d < bd) { bd = d; best = b; } }
+    if (best && Math.exp(bd) <= MATCH_RATIO) pairs.push({ size: a, density: best });
+  }
+  return pairs;
+}
+
+/* ---------- state ---------- */
+const state = {
+  routes: new Set(["size"]),                  // boxes shown, at least one; at load the "Both changes" preset
+  rules: new Set(["busiest"]),                // islands shown, at least one
+  alpha: 0.85,
+  matched: false,                             // only the N present in both boxes; presets leave it alone
+  longer: true,                               // show the larger-box runs to their own ends; presets leave it alone
+  commonAlpha: true,                          // only the α run in both boxes; on at load; presets leave it alone
+  view: "grid",                               // "charts" (one α), "grid" (every α) or "L" (late value against the box side)
+  stepL: 80000,                               // the step of the "vs L" view; every larger-box run reaches 80,000
+  lRight: "entropy",                          // the second chart of "vs L": "entropy" (against α) or "slope"
+  axis: "log",                                // the step axis of the time charts: "log" or "linear"
+  seeds: false,                               // spatial entropy: each seed as a thin line behind the seed means
+  gridShow: "density",                        // what the all-α panels show: "density" or "entropy"
+  menu: false,                                // the menu of boxes, islands and October comparisons is open
+};
+/* what the page shows at load, and what "Reset" in the menu returns to */
+const isDefaultChoice = () => sameSet(state.routes, ["size"]) && sameSet(state.rules, ["busiest"]) && state.longer && !state.matched && state.commonAlpha;
+const longerOn = () => state.longer && state.routes.has("size");
+function resetChoice() { state.routes = new Set(["size"]); state.rules = new Set(["busiest"]); state.longer = true; state.matched = false; state.commonAlpha = true; }
+/* the all-α panels show the spatial entropy, which uses no island: the island switches do not apply there */
+const entropyGrid = () => state.view === "grid" && state.gridShow === "entropy" && state.routes.has("size");
+let model = null;
+/* a preset sets the boxes and islands; every control works as usual afterwards */
+const PRESETS = [
+  { id: "sep30", label: "Sep 30 plot", tip: "Old island, denser 90 × 90 box: the Sep 30 figure. The finer α now have four seeds instead of three.",
+    routes: ["density"], rules: ["old"] },
+  { id: "rule", label: "Island change", tip: "Same box, different islands: the denser 90 × 90 box with the old, new and densest islands laid over each other.",
+    routes: ["density"], rules: ["old", "busiest", "densest"] },
+  { id: "route", label: "Count change", tip: "Same island, different way of adding particles: both boxes with the old island.",
+    routes: ["density", "size"], rules: ["old"] },
+  { id: "both", label: "Both changes", tip: "Larger box, new island: both changes together.",
+    routes: ["size"], rules: ["busiest"] },
+];
+const sameSet = (set, arr) => set.size === arr.length && arr.every((x) => set.has(x));
+/* a preset shows as on while the boxes and islands match it */
+const presetOn = (p) => sameSet(state.routes, p.routes) && sameSet(state.rules, p.rules);
+function applyPreset(id) { const p = PRESETS.find((x) => x.id === id); if (p) { state.routes = new Set(p.routes); state.rules = new Set(p.rules); renderAll(); } }
+/* one island: the boxes share a chart; one box: the islands do; both boxes and several islands: one panel per island */
+const activeRoutes = () => ROUTE_ORDER.filter((r) => state.routes.has(r));
+const activeRules = () => RULE_ORDER.filter((r) => state.rules.has(r));
+const bothRoutes = () => state.routes.size === 2;
+const splitView = () => bothRoutes() && state.rules.size > 1;
+/* every α of the boxes shown, so adding a box only adds curves; "common α" (or matched N, whose pairs need
+   both boxes) keeps the α run in both boxes */
+const commonAlphas = () => model.alphas.density.filter((a) => model.alphas.size.includes(a));
+const commonForced = () => bothRoutes() && state.matched;
+function alphasAvailable() {
+  if (state.view === "L") return model.alphas.size.slice();   // the larger box only
+  if (state.commonAlpha || commonForced()) return commonAlphas();
+  const set = new Set(activeRoutes().flatMap((r) => model.alphas[r]));
+  return [...set].sort((a, b) => a - b);
+}
+const missingBoxNote = (alpha) => bothRoutes() && !model.alphas.size.includes(alpha) ? "denser box only" : null;
+/* the shortest and longest larger-box run, formatted for display */
+function runEnds() { const ends = model.entries.size.map((e) => e.horizon).filter(isNum); return ends.length ? [Math.min(...ends), Math.max(...ends)].map((v) => v.toLocaleString("en-US")) : ["20,000"]; }
+let alphaNote = "";
+function ensureAlpha() {
+  const av = alphasAvailable(); alphaNote = "";
+  if (!av.length || av.includes(state.alpha)) return;
+  const from = state.alpha;
+  state.alpha = av.reduce((b, a) => Math.abs(a - from) < Math.abs(b - from) ? a : b, av[0]);
+  alphaNote = "α " + from + ": denser box only → " + state.alpha;
+}
+/* line pattern = island (old dashed, new solid, densest dotted); line weight = box (denser thin with hollow
+   markers, larger thick with filled markers). Buttons, legends and curves all use it. */
+const RULE_SAMPLE = { old: { dash: "7 5", mini: "4 3", shape: "circle" }, busiest: { dash: null, shape: "circle" }, densest: { dash: "0.1 5", mini: "0.1 4", shape: "diamond" } };
+const BOX_SAMPLE = { density: { width: 1.3, hollow: true }, size: { width: 2.8, hollow: false } };
+function styleFor(route, rule) {
+  return { dash: RULE_SAMPLE[rule].dash, mini: RULE_SAMPLE[rule].mini, shape: RULE_SAMPLE[rule].shape, width: BOX_SAMPLE[route].width, hollow: BOX_SAMPLE[route].hollow };
+}
+const boxSample = (route) => glyph({ width: BOX_SAMPLE[route].width, hollow: BOX_SAMPLE[route].hollow, endMarker: true }, "currentColor");
+const islandSample = (rule) => glyph({ dash: RULE_SAMPLE[rule].dash, width: 2 }, "currentColor");
+const timeStyle = (route, rule) => styleFor(route, rule);
+const lateStyle = (route, rule) => Object.assign(styleFor(route, rule), { markers: true });
+function renderAll() { const f = focusKey(); ensureAlpha(); ensureStep(); refreshStops(); renderRail(); renderCharts(); restoreFocus(f); }
+/* a redraw replaces the switches; the one that had keyboard focus gets it back, so Tab, Space and Enter keep their place */
+function focusKey() {
+  const a = document.activeElement;
+  if (!a || a === document.body || !a.matches(":focus-visible")) return null;
+  return a.id ? { el: a, id: a.id } : a.parentElement && a.parentElement.id ? { el: a, host: a.parentElement.id, text: a.textContent.trim() } : null;
+}
+function restoreFocus(k) {
+  if (!k || k.el.isConnected) return;
+  const el = k.id ? $(k.id) : [...(($(k.host) || {}).children || [])].find((b) => b.textContent.trim() === k.text);
+  if (el && !el.closest("[hidden]")) el.focus({ preventScroll: true, focusVisible: true });
+}
+function renderCharts() {
+  const grid = state.view === "grid", vsL = state.view === "L";
+  $("charts").hidden = grid || vsL; $("gridview").hidden = !grid; $("lview").hidden = !vsL;
+  $("numbers-fold").hidden = grid;   // its table lists the late values drawn, which the all-α view does not have
+  if (grid) renderGrid(); else if (vsL) renderVsL(); else { renderTime(); renderEntropy(); renderLate(); }
+}
+
+/* ---------- controls ---------- */
+function segControl(host, options, current, onPick) {
+  host.replaceChildren(); host.classList.add("seg");
+  for (const o of options) {
+    const b = h("button", { type: "button", "aria-pressed": String(o.value === current), disabled: o.disabled || null, "data-tip": o.title || null }, o.glyph || null, o.kbd ? h("kbd", { text: o.kbd }) : null, o.label);
+    b.addEventListener("click", () => onPick(o.value));
+    host.append(b);
+  }
+}
+function chipControl(host, options, isOn, onToggle) {
+  host.replaceChildren(); host.className = "chips";
+  for (const o of options) {
+    const b = h("button", { type: "button", class: "chip", "aria-pressed": String(isOn(o.value)), "data-tip": o.title || null }, o.glyph || null, o.kbd ? h("kbd", { text: o.kbd }) : null, o.label);
+    b.addEventListener("click", () => onToggle(o.value));
+    host.append(b);
+  }
+}
+function toggleRoute(r) { if (state.routes.has(r)) { if (state.routes.size === 1) return; state.routes.delete(r); } else state.routes.add(r); }
+function toggleRule(r) { if (state.rules.has(r)) { if (state.rules.size === 1) return; state.rules.delete(r); } else state.rules.add(r); }
+function renderRail() {
+  // "vs L" draws the larger box only: the boxes, the presets (which choose boxes) and common α do not apply there
+  const vsL = state.view === "L", noIsland = entropyGrid();
+  $("dim-presets").hidden = vsL; $("dim-route").hidden = vsL; $("dim-step").hidden = !vsL; $("dim-axis").hidden = vsL; $("dim-rule").hidden = noIsland;
+  segControl($("axis-seg"), [{ value: "log", label: "log" }, { value: "linear", label: "linear", title: "Equal steps take equal width: the late part of a long run is spread out (X switches)" }], state.axis, (v) => { state.axis = v; renderAll(); });
+  // the menu: its button names the boxes and islands drawn, and is outlined when they are not the ones at load
+  {
+    const rules = activeRules().map((r) => RULES[r].chip), islands = rules.length === 1 ? rules[0] + " island" : rules.join(" + ") + " islands";
+    // the entropy has the larger box only: with both boxes chosen it names that, as the caption does
+    const boxes = noIsland ? (bothRoutes() ? "larger box only" : "larger box") : bothRoutes() ? "both boxes" : ROUTES[activeRoutes()[0]].short;
+    const btn = $("menu-btn"), same = isDefaultChoice();
+    btn.replaceChildren((vsL ? "" : boxes) + (vsL || noIsland ? "" : " · ") + (noIsland ? "" : islands) + (!vsL && state.routes.has("size") && !state.longer ? " · to step 20k" : ""),
+      s("svg", { class: "caret", viewBox: "0 0 10 10", "aria-hidden": "true" }, s("path", { d: "M1.5 3.2 5 6.8 8.5 3.2", fill: "none", style: "stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round" })));
+    btn.setAttribute("aria-expanded", String(state.menu)); btn.classList.toggle("changed", !same);
+    btn.dataset.tip = state.menu ? "" : noIsland ? "The box drawn; the spatial entropy uses no island. Open it for the denser 90 × 90 box or one of the October comparisons."
+      : "The box and the island drawn. Open it to add the old or the densest island, the denser 90 × 90 box, or one of the October comparisons.";
+    $("menu").hidden = !state.menu;
+    $("menu-reset").disabled = same; $("menu-state").textContent = same ? "default view" : "";
+  }
+  $("q-keys").dataset.tip = "← →   α\nG   one α / all α\nL   vs L\nX   step axis: log / linear\nE   " + (vsL ? "vs L: spatial entropy / slope" : "all α: island density / spatial entropy") + (noIsland ? "" : "\n1 2 3   islands: old, new, densest") + (vsL ? "" : "\nR   box: both, denser, larger");
+  if (vsL) segControl($("step-seg"), L_STEPS.map((T) => ({ value: T, label: fmtStep(T), disabled: !stepHasLines(T), title: stepHasLines(T) ? null : "No α has two boxes at this step." })), state.stepL, (T) => { state.stepL = T; renderAll(); });
+  chipControl($("presets"), PRESETS.map((p) => ({ value: p.id, label: p.label, title: p.tip })), (id) => presetOn(PRESETS.find((p) => p.id === id)), applyPreset);
+  // boxes
+  $("q-route").dataset.tip = "How the particle count N is raised. Line weight = box: denser 90×90 thin (hollow markers), larger box thick (filled markers).\n" + ROUTE_ORDER.map((r) => ROUTES[r].label + ": " + ROUTES[r].def).join("\n");
+  const routeOpts = ROUTE_ORDER.map((r) => ({ value: r, label: ROUTES[r].chip, title: ROUTES[r].label + ": " + ROUTES[r].def, glyph: boxSample(r) }));
+  chipControl($("route-picks"), routeOpts, (r) => state.routes.has(r), (r) => { toggleRoute(r); renderAll(); });
+  const opts = $("route-opts"); opts.replaceChildren();
+  {
+    const both = bothRoutes();
+    const cb = h("input", { type: "checkbox", id: "opt-matched", disabled: both ? null : true }); cb.checked = state.matched;   // kept, greyed, with one box
+    cb.addEventListener("change", () => { state.matched = cb.checked; renderAll(); });
+    opts.append(h("label", { class: "check" + (both ? "" : " off"), for: "opt-matched", "data-tip": "Only the N present in both boxes (within a factor 1.25): L 60 ↔ 1.2/site, L 90 ↔ 2.4 (shared runs), L 120 ↔ 4.8, L 180 ↔ 9.6 (same N), L 240 ↔ 14.4. Needs both boxes." }, cb, "matched N"));
+  }
+  {
+    const larger = state.routes.has("size");
+    const cb = h("input", { type: "checkbox", id: "opt-longer", disabled: larger ? null : true }); cb.checked = state.longer;
+    cb.addEventListener("change", () => { state.longer = cb.checked; renderAll(); });
+    opts.append(h("label", { class: "check" + (larger ? "" : " off"), for: "opt-longer", "data-tip": "Show the larger-box runs to their end, step " + runEnds().join(" to ") + " depending on the box and α; a dot marks where each run ends. Late values then come from one window per α, the last quarter of the shortest run at that α, so every N is compared over the same steps; a run that went on also has its own last quarter in the tooltip and the numbers. Off: every chart stops at step 20,000, where the denser box ends. Needs the larger box." }, cb, "longer runs"));
+  }
+  // islands
+  $("q-rule").dataset.tip = "Which group of sites counts as the island (density = its particles ÷ its sites).\nLine pattern = island: old dashed, new solid, densest dotted.";
+  const ruleOpts = RULE_ORDER.map((r, i) => ({ value: r, label: RULES[r].chip, kbd: String(i + 1), title: RULES[r].label + ": " + RULES[r].def + (RULES[r].caveat ? "\n" + RULES[r].caveat : ""), glyph: islandSample(r) }));
+  chipControl($("rule-picks"), ruleOpts, (r) => state.rules.has(r), (r) => { toggleRule(r); renderAll(); });
+  // α
+  const av = alphasAvailable();
+  segControl($("alpha-seg"), av.map((a) => ({ value: a, label: String(a) })), state.alpha, (a) => { state.alpha = a; renderAll(); });
+  const ao = $("alpha-opts"); ao.replaceChildren(); ao.hidden = vsL;
+  {
+    const forced = commonForced(), ca = commonAlphas();
+    const cb = h("input", { type: "checkbox", id: "opt-common", disabled: forced ? true : null }); cb.checked = forced || state.commonAlpha;
+    cb.addEventListener("change", () => { state.commonAlpha = cb.checked; renderAll(); });
+    ao.append(h("label", { class: "check" + (forced ? " off" : ""), for: "opt-common", "data-tip": "Only the " + ca.length + " α run in both boxes (" + ca.join(", ") + "): the same panels in every setting." + (forced ? "\nOn while matched N is on." : "") }, cb, "common α"));
+  }
+  $("alpha-hint").textContent = alphaNote || (vsL ? (hasLineAt(state.alpha, state.stepL) ? "the highlighted line" : "no line at this step") : "");
+  segControl($("view-seg"), [{ value: "charts", label: "one α", title: "One α at a time: island density and spatial entropy over time, then the late island density against N (G switches)" }, { value: "grid", label: "all α", title: "Every α as small panels: island density or spatial entropy over time (G switches)" },
+    { value: "L", label: "vs L", title: "Larger box at one step: the late island density against the box side L, one line per α, and beside it the spatial entropy against α, one line per box, or the slope of each density line (L key)" }], state.view, (v) => { state.view = v; renderAll(); });
+  if (popEl && !popEl.isConnected) hidePop(true);   // its control was just redrawn
+}
+/* ---------- the N colour bar ---------- */
+function renderNScale(host, shownN) {
+  host.replaceChildren();
+  const W = 170, H = 30, bx = 4, bw = W - 8;
+  const svg = s("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "colour scale: particle count N from " + fmtN(model.Nmin) + " to " + fmtN(model.Nmax) });
+  const gid = "ngrad-" + host.id, defs = s("defs"), lg = s("linearGradient", { id: gid, x1: 0, x2: 1, y1: 0, y2: 0 });
+  nStops.forEach((c, i) => lg.append(s("stop", { offset: (i / 6 * 100) + "%", "stop-color": c }))); defs.append(lg); svg.append(defs);
+  svg.append(s("rect", { x: bx, y: 7, width: bw, height: 7, rx: 2, fill: "url(#" + gid + ")" }));
+  const xOf = (N) => bx + nT(N) * bw;
+  for (const N of uniq(shownN)) svg.append(s("line", { x1: xOf(N), x2: xOf(N), y1: 3, y2: 6, style: "stroke:var(--ink-2);stroke-width:1" }));
+  svg.append(s("text", { x: bx, y: 27, "text-anchor": "start", text: fmtN(model.Nmin) }), s("text", { x: bx + bw, y: 27, "text-anchor": "end", text: fmtN(model.Nmax) }));
+  for (const d of [1e4, 1e5]) if (d > model.Nmin && d < model.Nmax) { const x = xOf(d); svg.append(s("line", { x1: x, x2: x, y1: 14, y2: 17, style: "stroke:var(--axis)" }), s("text", { x, y: 27, "text-anchor": "middle", text: fmtTick(d) })); }
+  host.append(h("b", { text: "N" }), svg);
+}
+
+/* ---------- island density over time ---------- */
+function timeSeriesFor(alpha, rules = activeRules()) {
+  const routes = activeRoutes(), two = bothRoutes();
+  const pairs = two && state.matched ? matchedPairs(alpha) : null;
+  const anchor = rules.includes("busiest") ? "busiest" : rules[0];   // the curves that carry N labels
+  const series = [], shownN = [];
+  for (const route of DRAW_ORDER) {
+    if (!routes.includes(route)) continue;
+    let entries = model.entriesFor(route, alpha);
+    if (pairs) entries = entries.filter((e) => pairs.some((p) => p[route] === e));
+    const steps = model.steps[route];
+    for (const rule of rules) {
+      const st = timeStyle(route, rule), key = RULES[rule].key;
+      for (const e of entries) {
+        const color = nColor(e.N);
+        shownN.push(e.N);
+        const seeds = e.late.seeds;   // every point of a curve is a mean over these seeds
+        const who = (two ? ROUTES[route].short + ", " : RULES[rule].short + " · ") + e.desc + " · N " + fmtN(e.N) + (seeds ? " · " + seeds + " seeds" : "");
+        const points = steps.map((t, i) => [t, t <= (state.longer && route === "size" ? Infinity : CUT) && e.curves[key] ? e.curves[key][i] : null]);
+        // with longer runs on, a dot marks where each run ends and the larger box's curves carry their N at
+        // that end, wherever it is; the denser box's curves end at step 20,000 under the curves that go on,
+        // where a column of labels would cover them (the N scale and the tooltip still give their N)
+        const label = rule === anchor && !(longerOn() && route === "density");
+        series.push({ color, points, width: st.width, dash: st.dash, shape: st.shape, hollow: st.hollow, style: st, endMark: longerOn(), endLabel: label ? fmtN(e.N) : null, tipLabel: who, route, rule, e });
+      }
+    }
+  }
+  return { series, shownN };
+}
+/* one y range for every chart and setting: it holds every density drawn (1.66 to 2,292) and every seed range (1.89 to 3,940).
+   Data above 4,000 raise its top to the next gridline above their largest value (5,000, ..., 10,000, 20,000, ...). */
+let Y_RANGE = [1.5, 4000];
+function fitYRange(data) {
+  let top = 0;
+  const keys = RULE_ORDER.map((r) => RULES[r].key);
+  for (const route of ["size", "density"]) for (const e of (data[route] && data[route].entries) || []) {
+    for (const k of keys) for (const v of (e.curves && e.curves[k]) || []) if (isNum(v) && v > top) top = v;
+    for (const [name, lt] of Object.entries(e)) if (name.startsWith("late") && lt) for (const k of keys) for (const v of lt[k] || []) if (isNum(v) && v > top) top = v;
+  }
+  if (top > 4000) { const p = Math.pow(10, Math.floor(Math.log10(top))); Y_RANGE = [1.5, Math.ceil(top / p) * p]; }
+}
+function styleLegend(host, forLate) {
+  host.replaceChildren();
+  const rules = activeRules(), routes = activeRoutes(), mk = forLate ? lateStyle : timeStyle;
+  if (bothRoutes()) for (const r of routes) host.append(h("span", { class: "item", "data-tip": ROUTES[r].def }, rules.length > 1 ? boxSample(r) : glyph(mk(r, rules[0]), "var(--ink-2)"), ROUTES[r].chip));
+  else for (const r of rules) host.append(h("span", { class: "item", "data-tip": RULES[r].def }, glyph(mk(routes[0], r), "var(--ink-2)"), RULES[r].chip));
+}
+/* what the legend does not say: the box or island held fixed, and matched N */
+function timeCaption(series) {
+  const routes = activeRoutes(), rules = activeRules(), parts = [];
+  if (bothRoutes() && rules.length === 1) parts.push("island: " + RULES[rules[0]].chip);
+  else if (!bothRoutes()) parts.push("route: " + ROUTES[routes[0]].chip);
+  if (state.longer) {
+    const larger = series.filter((sr) => sr.route === "size" && sr.points.some(([x, y]) => x > 0 && isNum(y)));
+    if (larger.length) parts.push((bothRoutes() ? "larger box runs end at step " : "runs end at step ") + listOr(uniq(larger.map((sr) => sr.e.horizon)).map(fmtStep)), "a dot marks each end");
+  }
+  if (state.matched && bothRoutes()) parts.push("matched N");
+  return parts.join(" · ");
+}
+/* the step axis of the time charts: log from step 25, or linear from 0, to the last step drawn (set by renderTime
+   and renderGrid from the island density, so the entropy chart under it has the same axis) */
+let lastTimeStep = 0;
+const stepAxis = () => ({ type: state.axis, label: "step", domain: lastTimeStep ? [state.axis === "log" ? 25 : 0, lastTimeStep] : null });
+function renderTime() {
+  const rules = activeRules(), split = splitView();
+  $("time-title").textContent = "Island density · α " + state.alpha;
+  styleLegend($("time-legend"), false);
+  const host = $("time-chart"); host.replaceChildren(); host.classList.toggle("split", split);
+  const panels = split ? rules.map((r) => Object.assign({ rule: r }, timeSeriesFor(state.alpha, [r]))) : [Object.assign({ rule: null }, timeSeriesFor(state.alpha, rules))];
+  renderNScale($("time-nscale"), panels.flatMap((p) => p.shownN));
+  lastTimeStep = panels.reduce((last, p) => p.series.reduce((last, sr) => sr.points.reduce((last, [x, y]) => isNum(y) && x > last ? x : last, last), last), 0);
+  for (const p of panels) { p.host = split ? h("div", { class: "chart" }) : host; if (split) host.append(p.host); }
+  for (const p of panels) drawLineChart(p.host, {
+    title: split ? RULES[p.rule].chip : null,
+    x: stepAxis(), y: { type: "log", label: "island density", domain: Y_RANGE, minChars: 3 },
+    series: p.series, hover: "x", leaders: true, tipTitle: (x) => "step " + x.toLocaleString("en-US"),
+    aria: "island density over time at alpha " + state.alpha + (p.rule ? ", " + RULES[p.rule].label : ""), emptyText: "No runs at α = " + state.alpha + " for this choice.",
+  });
+  const cap = $("time-caption"); cap.textContent = [timeCaption(panels.flatMap((p) => p.series)), missingBoxNote(state.alpha)].filter(Boolean).join(" · "); cap.dataset.tip = cap.textContent;
+}
+
+/* ---------- spatial entropy over time ----------
+   The larger box only, from its saved lattices (build/entropy.py). Drawn as ln A − S: S = −Σ p ln p over the
+   sites, p = a site's share of all particles, A = L² sites. 0 when every site holds the same number; particles
+   spread evenly over m sites give ln(A/m). It is the Lab's spatial order, 1 − S / ln A, times ln A. */
+let ENT_TOP = 8, ENT_EVEN = null, ENT_START = null;   // the top of its axis; at step 0 (particles placed at random), the mean over the boxes and [lowest, highest] box
+function fitEntropy() {
+  let top = 0; const start = [];
+  for (const e of model.entropy.values()) {
+    const a = Math.log(e.L * e.L);
+    for (const row of e.S) for (const v of row) if (isNum(v) && a - v > top) top = a - v;
+    if (e.steps[0] === 0 && isNum(e.mean[0])) start.push(a - e.mean[0]);
+  }
+  if (top > 0) ENT_TOP = Math.max(1, Math.ceil(top));
+  if (start.length) { ENT_EVEN = start.reduce((x, y) => x + y, 0) / start.length; ENT_START = [Math.min(...start), Math.max(...start)]; }
+}
+const ENT_SAVED = "one point per saved lattice: steps 100, 500, 1k, 2k, 5k, 10k, 20k, then every 20k";
+const ENT_DEF = "ln A − S, where S = −Σ p ln p over the sites, p is the share of all particles on a site, and A = L² is the number of sites.\n"
+  + "0: every site holds the same number. Particles spread evenly over m sites give ln(A/m). For any lattice, e^S is the effective number of sites (m for an even spread), so +0.69 means half as many effective sites. ln A − S rises as the particles gather, whichever pile they gather in.\n";
+const ENT_TIP = ENT_DEF
+  + "It is the Lab's spatial order times ln A (the Lab shows 1 − S / ln A; the tooltip gives that too).\n"
+  + "From the saved lattices of the larger box: steps 100, 500, 1k, 2k, 5k, 10k, 20k, then every 20k. A change faster than that is not resolved.";
+/* the "?" of the entropy against α in "vs L" */
+const ENT_VSL_TIP = ENT_DEF
+  + "It is the Lab's spatial order times ln A (the Lab shows 1 − S / ln A).\n"
+  + "Here, at the chosen step: for each run, the mean over its lattices saved in the same steps as the island density beside it (one every 20k), then the mean over the seeds. Bars: smallest and largest seed value. One line per box; a box whose runs stop before the step has no point at that α.\n"
+  + "The α axis is cut between 0.5 and 0.8, where no α was run: 0 to 0.5 is drawn short, 0.8 to 1 spread out.";
+function entropySeriesFor(alpha) {
+  const means = [], singles = [], shownN = [];
+  if (!state.routes.has("size")) return { series: [], shownN };
+  const lim = state.longer ? Infinity : CUT;
+  // the same boxes as the island density: with matched N, only the larger boxes that have a pair
+  const pairs = bothRoutes() && state.matched ? matchedPairs(alpha) : null;
+  for (const e of model.entriesFor("size", alpha).filter((e) => !pairs || pairs.some((p) => p.size === e))) {
+    const en = model.entropy.get(alpha + "|" + e.L); if (!en) continue;
+    const a = Math.log(e.L * e.L), color = nColor(e.N), at = new Map(en.steps.map((t, i) => [t, i]));
+    shownN.push(e.N);
+    const pts = (row) => en.steps.map((t, i) => [t, t <= lim ? a - row[i] : null]);
+    if (state.seeds) for (const row of en.S) singles.push({ color, points: pts(row), width: 0.9, opacity: 0.5, noTip: true });
+    means.push({ color, points: pts(en.mean), width: 2.8, style: { width: 2.8 }, endMark: state.longer, endLabel: "L " + e.L, e,
+      tipAt: (t) => { const i = at.get(t), d = en.S.map((row) => a - row[i]);
+        return "L " + e.L + " · N " + fmtN(e.N) + " · " + en.S.length + " seeds " + fmt(Math.min(...d)) + " to " + fmt(Math.max(...d)) + " · Lab order " + (1 - en.mean[i] / a).toFixed(3); } });
+  }
+  return { series: [...singles, ...means], shownN };
+}
+function seedsCheck(host, id) {
+  host.replaceChildren();
+  const cb = h("input", { type: "checkbox", id }); cb.checked = state.seeds;
+  cb.addEventListener("change", () => { state.seeds = cb.checked; renderAll(); });
+  host.append(h("label", { class: "check", for: id, "data-tip": "Each seed as a thin line behind the seed means. Where the seeds part, the mean alone hides that some runs sit at one level and some at another." }, cb, "single seeds"));
+}
+function entropyLegend(host) {
+  host.replaceChildren(h("span", { class: "item" }, glyph({ width: 2.8 }, "var(--ink-2)"), "seed mean"));
+  if (state.seeds) host.append(h("span", { class: "item" }, glyph({ width: 0.9 }, "var(--ink-2)"), "single seeds"));
+}
+const entropyRefs = (short) => ENT_EVEN == null ? [] : [{ y: ENT_EVEN, label: (short ? "random start: " : "random start (step 0): ") + ENT_EVEN.toFixed(3) }];
+function renderEntropy() {
+  const card = $("order"), show = state.routes.has("size");
+  card.hidden = !show; if (!show) return;
+  $("order-title").textContent = "Spatial entropy · α " + state.alpha;
+  $("q-order").dataset.tip = ENT_TIP;
+  entropyLegend($("order-legend")); seedsCheck($("order-opts"), "opt-seeds");
+  const { series } = entropySeriesFor(state.alpha);
+  drawLineChart($("order-chart"), {
+    x: stepAxis(), y: { type: "linear", label: "ln A − S", domain: [0, ENT_TOP], minChars: 3 }, refs: entropyRefs(),
+    series, hover: "x", leaders: true, tipTitle: (x) => "ln A − S · step " + x.toLocaleString("en-US"),
+    aria: "spatial entropy over time at alpha " + state.alpha + ", larger box", emptyText: "No saved lattices at α = " + state.alpha + " in the larger box.",
+  });
+  const cap = $("order-caption"); cap.textContent = [bothRoutes() ? "larger box only" : "route: Larger box", bothRoutes() && state.matched ? "matched N" : null, "ln A − S: higher = more gathered", ENT_SAVED].filter(Boolean).join(" · "); cap.dataset.tip = cap.textContent;
+}
+
+/* ---------- grid: one panel per α ---------- */
+function renderGrid() {
+  const av = alphasAvailable(), cells = $("grid-cells"), rules = activeRules(), larger = state.routes.has("size");
+  const ent = state.gridShow === "entropy" && larger, split = splitView() && !ent;
+  cells.replaceChildren();
+  segControl($("grid-seg"), [{ value: "density", label: "island density" }, { value: "entropy", label: "spatial entropy", disabled: !larger, title: larger ? "ln A − S from the saved lattices of the larger box (E switches)" : "Needs the larger box." }], ent ? "entropy" : "density", (v) => { state.gridShow = v; renderAll(); });
+  $("grid-title").textContent = (ent ? "Spatial entropy" : "Island density") + " · every α";
+  // the checkbox comes first, so the "single seeds" legend item it adds appears after it and does not push it along
+  if (ent) { const lg = $("grid-legend"); entropyLegend(lg); const box = h("span", { class: "item" }); lg.prepend(box); seedsCheck(box, "opt-seeds-grid"); } else styleLegend($("grid-legend"), false);
+  // the island density sets the step axis in both cases, so switching the quantity keeps every panel's axis
+  const dens = split ? rules.flatMap((r) => av.map((a) => Object.assign({ alpha: a, rule: r }, timeSeriesFor(a, [r])))) : av.map((a) => Object.assign({ alpha: a, rule: null }, timeSeriesFor(a, rules)));
+  const panels = ent ? av.map((a) => Object.assign({ alpha: a, rule: null }, entropySeriesFor(a))) : dens;
+  renderNScale($("grid-nscale"), panels.flatMap((p) => p.shownN));
+  const lastStep = lastTimeStep = dens.reduce((last, p) => p.series.reduce((last, sr) => sr.points.reduce((last, [x, y]) => isNum(y) && x > last ? x : last, last), last), 0);
+  // place every panel first, so each is measured at its final size, then draw
+  let lastRule = null;
+  for (const p of panels) {
+    if (split && p.rule !== lastRule) { cells.append(h("div", { class: "gsec", text: RULES[p.rule].chip })); lastRule = p.rule; }
+    p.host = h("div", { class: "chart" });
+    const mini = h("div", { class: "mini", "aria-label": "alpha " + p.alpha + (p.rule ? " " + RULES[p.rule].label : "") }, p.host);
+    mini.addEventListener("dblclick", () => { state.alpha = p.alpha; state.view = "charts"; renderAll(); });
+    cells.append(mini);
+  }
+  for (const p of panels) drawLineChart(p.host, {
+    compact: true, title: "α " + p.alpha + (p.rule ? " · " + RULES[p.rule].chip : ""), titleNote: missingBoxNote(p.alpha),
+    x: stepAxis(), y: ent ? { type: "linear", label: "ln A − S", domain: [0, ENT_TOP] } : { type: "log", label: "island density", domain: Y_RANGE }, refs: ent ? entropyRefs() : null,
+    series: p.series, hover: "x", tipTitle: (x) => "α " + p.alpha + (ent ? " · ln A − S" : "") + " · step " + x.toLocaleString("en-US"),
+    aria: (ent ? "spatial entropy" : "island density") + " over time at alpha " + p.alpha, emptyText: ent ? "no saved lattices" : "no runs",
+  });
+  const cap = $("grid-caption"); cap.textContent = (ent ? ["ln A − S: 0 = every site the same, higher = more gathered", bothRoutes() ? "larger box only" : "route: Larger box", bothRoutes() && state.matched ? "matched N" : null, ENT_SAVED, "double-click a panel to open it"] : [timeCaption(panels.flatMap((p) => p.series)), "double-click a panel to open it"]).filter(Boolean).join(" · "); cap.dataset.tip = cap.textContent;
+}
+
+/* ---------- late island density against N ---------- */
+/* default: both boxes at step 20,000. Longer runs: the larger box at one window per α, the last quarter of
+   the shortest run at that α (a run that went on keeps that window as late<T>), so every N is compared over
+   the same steps; such a run's own last quarter comes along for the tooltip and the numbers table */
+function commonLateT(alpha) { const ends = model.entriesFor("size", alpha).map((e) => e.horizon).filter(isNum); return ends.length ? Math.min(...ends) : null; }
+function lateAt(lt, key) {
+  const a = lt && lt[key];
+  if (!a || !isNum(a[0])) return null;
+  const w = lt.window || [0.75 * lt.T, lt.T];
+  return { v: a[0], lo: a[1], hi: a[2], seeds: lt.seeds, T: lt.T, win: fmtStep(w[0]) + "–" + fmtStep(w[1]) };
+}
+function lateOf(e, route, rule) {
+  const key = RULES[rule].key;
+  if (route !== "size") return lateAt(e.late, key);
+  if (!state.longer) return lateAt(e.late20000, key);
+  const T = commonLateT(e.alpha), lt = e.horizon === T ? e.late : (e["late" + T] || e.late);
+  const val = lateAt(lt, key);
+  if (val && lt !== e.late) val.own = lateAt(e.late, key);
+  return val;
+}
+function lateSeriesFor(rules) {
+  const routes = activeRoutes(), two = bothRoutes();
+  const pairs = two && state.matched ? matchedPairs(state.alpha) : null;
+  const series = [], ranges = [], rows = [], shownN = [];
+  for (const route of DRAW_ORDER) {
+    if (!routes.includes(route)) continue;
+    let entries = model.entriesFor(route, state.alpha);
+    if (pairs) entries = entries.filter((e) => pairs.some((p) => p[route] === e));
+    for (const rule of rules) {
+      const st = lateStyle(route, rule);
+      const pts = entries.map((e) => ({ e, val: lateOf(e, route, rule) })).filter((p) => p.val);
+      if (!pts.length) continue;
+      for (const p of pts) { shownN.push(p.e.N); rows.push({ route, rule, ...p }); ranges.push({ x: p.e.N, lo: p.val.lo, hi: p.val.hi, color: nColor(p.e.N) }); }
+      const who = two ? ROUTES[route].label : RULES[rule].label;
+      series.push({ color: "var(--ink-2)", opacity: 0.75, width: st.width, dash: st.dash, points: pts.map((p) => [p.e.N, p.val.v]), markers: true, line: true, shape: st.shape, hollow: st.hollow,
+        markerColor: (i) => nColor(pts[i].e.N), style: st, tipLabel: who,
+        tipRows: (i) => { const { e, val } = pts[i]; return { title: who + " · " + e.descLong + " · N " + e.N.toLocaleString("en-US"), rows: [
+          { color: nColor(e.N), style: st, value: fmt(val.v), label: RULES[rule].short + ", density" },
+          { value: fmt(val.lo) + " – " + fmt(val.hi), label: "range over " + val.seeds + " seed" + (val.seeds > 1 ? "s" : "") },
+          { value: val.win, label: "mean over steps" },
+          ...(val.own ? [{ value: fmt(val.own.v), label: "over the run's own last quarter, " + val.own.win },
+                         { value: fmt(val.own.lo) + " – " + fmt(val.own.hi), label: "its range over the seeds" }] : [])] }; } });
+    }
+  }
+  return { series, ranges, rows, shownN };
+}
+function renderLate() {
+  const rules = activeRules(), split = splitView();
+  $("late-title").textContent = "Late island density vs N · α " + state.alpha;
+  const host = $("late-chart"), numbers = $("late-numbers");
+  host.replaceChildren(); numbers.replaceChildren(); host.classList.toggle("split", split);
+  const panels = split ? rules.map((r) => Object.assign({ rule: r }, lateSeriesFor([r]))) : [Object.assign({ rule: null }, lateSeriesFor(rules))];
+  styleLegend($("late-legend"), true);
+  renderNScale($("late-nscale"), panels.flatMap((p) => p.shownN));
+  for (const p of panels) { p.host = split ? h("div", { class: "chart" }) : host; if (split) host.append(p.host); }
+  for (const p of panels) drawLineChart(p.host, {
+    title: split ? RULES[p.rule].chip : null,
+    x: { type: "log", label: "N" }, y: { type: "log", label: "late island density", domain: Y_RANGE },
+    series: p.series, ranges: p.ranges, hover: "point",
+    aria: "late island density against N at alpha " + state.alpha + (p.rule ? ", " + RULES[p.rule].label : ""), emptyText: "No late values at α = " + state.alpha + " for this choice.",
+  });
+  const cap = $("late-caption");
+  const rows = panels.flatMap((p) => p.rows);
+  const parts = [], larger = rows.filter((r) => r.route === "size");
+  if (state.longer && larger.length) {
+    const windows = [...new Set(larger.sort((a, b) => a.val.T - b.val.T).map((r) => r.val.win))];
+    parts.push("late: larger box " + windows.join(" or ") + ", the same steps for every N");
+    const past = larger.filter((r) => r.val.own);
+    if (past.length) parts.push("runs past " + fmtStep(Math.max(...past.map((r) => r.val.T))) + ": own last quarter in the tooltip and the numbers");
+    if (rows.some((r) => r.route === "density")) parts.push("denser box 15.1k–20k");
+  }
+  if (missingBoxNote(state.alpha)) parts.push(missingBoxNote(state.alpha));
+  cap.textContent = parts.join(" · ");
+  cap.dataset.tip = cap.textContent;
+  // the same values as a table, in the bottom fold
+  // with longer runs on, also where each run ended and, for a run that went past the shared window, its own last quarter
+  const own = state.longer && rows.some((r) => r.route === "size");
+  const tbl = h("table", { class: "data" }, h("thead", {}, h("tr", {}, h("th", { text: "route" }), h("th", { class: "l", text: "box / density" }), h("th", { text: "N" }), h("th", { class: "l", text: "island" }), h("th", { text: "density" }), h("th", { text: "seed min" }), h("th", { text: "seed max" }), h("th", { text: "seeds" }), h("th", { class: "l", text: "window" }),
+    own ? [h("th", { text: "run end" }), h("th", { text: "own last quarter" }), h("th", { class: "l", text: "over steps" })] : null)));
+  const tb = h("tbody");
+  rows.sort((a, b) => a.e.N - b.e.N || ROUTE_ORDER.indexOf(a.route) - ROUTE_ORDER.indexOf(b.route) || RULE_ORDER.indexOf(a.rule) - RULE_ORDER.indexOf(b.rule));
+  for (const r of rows) tb.append(h("tr", {}, h("td", { text: ROUTES[r.route].short }), h("td", { class: "l", text: r.e.desc }), h("td", { text: r.e.N.toLocaleString("en-US") }), h("td", { class: "l", text: RULES[r.rule].short }), h("td", { class: "strong", text: fmt(r.val.v) }), h("td", { text: fmt(r.val.lo) }), h("td", { text: fmt(r.val.hi) }), h("td", { text: r.val.seeds }), h("td", { class: "l dim", text: r.val.win }),
+    own ? [h("td", { class: "dim", text: fmtStep(r.route === "size" ? r.e.horizon : r.val.T) }), h("td", { class: r.val.own ? null : "dim", text: r.val.own ? fmt(r.val.own.v) : "same" }), h("td", { class: "l dim", text: r.val.own ? r.val.own.win : "" })] : null));
+  tbl.append(tb); numbers.append(h("div", { class: "hint", text: "α = " + state.alpha + " · the late values drawn above" }), tbl);
+}
+
+/* ---------- late island density against the box side L, and its slope against α ----------
+   The larger box only (2.4 particles per site, N ≈ 2.4 L²). Every box is taken at the same step: the last
+   quarter of the run up to that step, which a run that went further keeps as late<T>. One α is highlighted. */
+const L_STEPS = [20000, 80000, 160000, 320000, 640000, 1280000];
+const MIN_FIT = 4;                 // boxes needed for a slope
+function lateAtStep(e, T) { return (T === e.horizon ? e.late : e["late" + T]) || null; }
+/* least squares of ln(density) on ln(L): density ≈ c · L^b. se is the standard error of b, from the scatter of
+   the boxes around the line. null below MIN_FIT boxes. */
+function fitSlope(xy) {
+  const n = xy.length; if (n < MIN_FIT) return null;
+  const x = xy.map(([L]) => Math.log(L)), y = xy.map(([, v]) => Math.log(v));
+  const mx = x.reduce((a, v) => a + v, 0) / n, my = y.reduce((a, v) => a + v, 0) / n;
+  let sxx = 0, sxy = 0, ssr = 0;
+  for (let i = 0; i < n; i++) { sxx += (x[i] - mx) ** 2; sxy += (x[i] - mx) * (y[i] - my); }
+  const b = sxy / sxx, a = my - b * mx;
+  for (let i = 0; i < n; i++) ssr += (y[i] - a - b * x[i]) ** 2;
+  return { b, a, se: Math.sqrt(ssr / (n - 2) / sxx), n, L0: xy[0][0], L1: xy[n - 1][0] };
+}
+/* one row per α: its boxes at step T with their late values, the fit, and the fit without L 60 (the same fit
+   when L 60 has no point; has60 says whether it has one) */
+function lRows(T, rule) {
+  const key = RULES[rule].key;
+  return model.alphas.size.map((alpha) => {
+    const all = model.entriesFor("size", alpha);
+    const pts = all.map((e) => ({ e, val: lateAt(lateAtStep(e, T), key) })).filter((p) => p.val && p.val.v > 0).sort((a, b) => a.e.L - b.e.L);
+    const xy = pts.map((p) => [p.e.L, p.val.v]);
+    return { alpha, pts, absent: all.filter((e) => !pts.some((p) => p.e === e)).map((e) => e.L).sort((a, b) => a - b),
+             has60: xy.some(([L]) => L === 60), fit: fitSlope(xy), fitNo60: fitSlope(xy.filter(([L]) => L !== 60)) };
+  });
+}
+const stepHasLines = (T) => model.alphas.size.some((a) => model.entriesFor("size", a).filter((e) => lateAtStep(e, T)).length >= 2);
+const hasLineAt = (alpha, T) => model.entriesFor("size", alpha).some((e) => lateAtStep(e, T));
+function ensureStep() { if (!stepHasLines(state.stepL)) state.stepL = L_STEPS.find(stepHasLines) || 80000; }
+const fmtSlope = (f) => f.b.toFixed(2) + " ± " + f.se.toFixed(2);
+const fitBoxes = (f) => "L " + f.L0 + " to " + f.L1 + ", " + f.n + " boxes";
+const SLOPE_DEF = "the slope of the least-squares straight line through ln(density) against ln(L), over the boxes drawn at that α (at least " + MIN_FIT + "): density ≈ c · L^slope. Bars: ± 1 standard error of the slope, from the scatter of the boxes around the line. Slope 0: no trend with L. Slope 2: density scales like N. The slope summarises the points, which need not follow a power law. The tooltip and the numbers also give it without L 60, where at α ≥ 0.88 the island covers most of the box.";
+/* ln A − S of one box at step T, over the same steps as its late island density (the window of lateAtStep): for
+   each run the mean over its lattices saved in that window, then the mean over the runs, with the smallest and
+   largest run. null where the box's runs stop before T or no lattice was saved in the window. */
+function entropyAtStep(e, T) {
+  const lt = lateAtStep(e, T), en = model.entropy.get(e.alpha + "|" + e.L);
+  if (!lt || !en) return null;
+  const w = lt.window || [0.75 * lt.T, lt.T], idx = [];
+  en.steps.forEach((t, i) => { if (t >= w[0] && t <= w[1]) idx.push(i); });
+  if (!idx.length) return null;
+  const a = Math.log(e.L * e.L), runs = en.S.map((row) => idx.reduce((sum, i) => sum + (a - row[i]), 0) / idx.length);
+  if (!runs.length || !runs.every(isNum)) return null;
+  return { v: runs.reduce((x, y) => x + y, 0) / runs.length, lo: Math.min(...runs), hi: Math.max(...runs), seeds: runs.length, steps: idx.map((i) => en.steps[i]) };
+}
+/* one column per α: its boxes with an entropy value at step T, and the boxes it has none for */
+function entropyCols(T) {
+  return model.alphas.size.map((alpha) => {
+    const all = model.entriesFor("size", alpha);
+    const pts = all.map((e) => ({ e, val: entropyAtStep(e, T) })).filter((q) => q.val).sort((p, q) => p.e.L - q.e.L);
+    return { alpha, pts, absent: all.filter((e) => !pts.some((q) => q.e === e)).map((e) => e.L).sort((a, b) => a - b) };
+  });
+}
+/* "mean over the lattices saved at steps 260k to 320k, then over seeds" or "the lattice saved at step 80k, mean over seeds" */
+const latticeText = (steps) => steps.length > 1 ? "mean over the lattices saved at steps " + fmtStep(steps[0]) + " to " + fmtStep(steps[steps.length - 1]) + ", then over seeds" : "the lattice saved at step " + fmtStep(steps[0]) + ", mean over seeds";
+const ENT_POINT = { width: 2, markers: true, shape: "circle" };
+/* the α axis of the entropy against α: no α was run between 0.5 and 0.8, so the axis is cut there; 0 to 0.5 is
+   drawn short and 0.8 to 1, where the α run lie 0.02 to 0.05 apart, is spread out (each part linear). The ticks
+   are the α run: the ends, 0.5, 0.8 and 0.9 first, the others where they fit. */
+const ENT_ALPHA_AXIS = { knots: [[0, 0], [0.5, 1.2], [0.8, 2.4], [1, 10.4]], domain: [-0.15, 1.008], breaks: [0.65], minGap: 34,
+  ticks: [0, 0.5, 0.8, 1, 0.9, 0.85, 0.94, 0.88, 0.92, 0.96] };
+function renderVsL() {
+  const rules = activeRules(), T = state.stepL, focus = state.alpha, split = rules.length > 1;
+  const sides = uniq(model.entries.size.map((e) => e.L));
+  const panels = rules.map((rule) => ({ rule, rows: lRows(T, rule) }));
+  const first = panels[0].rows.find((r) => r.pts.length), win = first ? first.pts[0].val.win : null;
+  const focusFit = panels.some((p) => p.rows.some((r) => r.alpha === focus && r.fit));
+  const legendFor = (host, withFit) => {
+    host.replaceChildren();
+    for (const r of rules) host.append(h("span", { class: "item", "data-tip": RULES[r].def }, glyph(lateStyle("size", r), "var(--ink-2)"), RULES[r].chip));
+    if (withFit && focusFit) host.append(h("span", { class: "item", "data-tip": "The straight line fitted through the highlighted α's points: ln(density) against ln(L). Its slope is that α's point under \"slope\" in the other chart of this view." }, glyph({ width: 1.4 }, "var(--accent)"), "fit, α " + focus));
+  };
+
+  // ----- density against L: one line per α, the highlighted one on top with its seed ranges and its fit
+  $("lside-title").textContent = "Late island density vs L · step " + fmtStep(T);
+  legendFor($("lside-legend"), true);
+  const host = $("lside-chart"); host.replaceChildren(); host.classList.toggle("split", split);
+  const shownN = [];
+  for (const p of panels) { p.host = split ? h("div", { class: "chart" }) : host; if (split) host.append(p.host); }
+  for (const p of panels) {
+    const st = lateStyle("size", p.rule), series = [], ranges = [];
+    for (const row of [...p.rows.filter((r) => r.alpha !== focus), ...p.rows.filter((r) => r.alpha === focus)]) {
+      if (!row.pts.length) continue;
+      const on = row.alpha === focus, fit = row.fit;
+      for (const q of row.pts) shownN.push(q.e.N);
+      if (on) for (const q of row.pts) ranges.push({ x: q.e.L, lo: q.val.lo, hi: q.val.hi, color: nColor(q.e.N) });
+      if (on && fit) series.push({ color: "var(--accent)", width: 1.4, points: [fit.L0, fit.L1].map((L) => [L, Math.exp(fit.a + fit.b * Math.log(L))]),
+        tipRows: () => ({ title: "fit · α " + row.alpha + " · " + RULES[p.rule].short, rows: [{ value: fmtSlope(fit), label: "slope, " + fitBoxes(fit) }] }) });
+      // the highlighted α: dark line, points in the colour of N, its label; every other α faint, with small grey
+      // points and a muted label, and a click on one of its points highlights it, as its α button does
+      series.push({ color: on ? "var(--ink)" : "var(--muted)", opacity: on ? 1 : 0.5, width: on ? 2.8 : 1, dash: st.dash, points: row.pts.map((q) => [q.e.L, q.val.v]), markers: true, line: true, shape: st.shape,
+        markerColor: on ? (i) => nColor(row.pts[i].e.N) : () => "var(--muted)", markerR: on ? null : 2.6, style: st, endLabel: "α " + row.alpha, endMuted: !on,
+        onPick: on ? null : () => { state.alpha = row.alpha; renderAll(); },
+        tipRows: (i) => { const { e, val } = row.pts[i]; return { title: "α " + row.alpha + " · L " + e.L + " · N " + e.N.toLocaleString("en-US"), rows: [
+          { color: nColor(e.N), style: st, value: fmt(val.v), label: RULES[p.rule].short + ", density" },
+          { value: fmt(val.lo) + " – " + fmt(val.hi), label: "range over " + val.seeds + " seed" + (val.seeds > 1 ? "s" : "") },
+          { value: val.win, label: "mean over steps" },
+          ...(fit ? [{ value: fmtSlope(fit), label: "slope at this α, " + fitBoxes(fit) }] : []),
+          ...(on ? [] : [{ value: "", label: "click to highlight α " + row.alpha }])] }; } });
+    }
+    drawLineChart(p.host, {
+      title: split ? RULES[p.rule].chip : null,
+      x: { type: "log", label: "box side L  (N ≈ 2.4 L²)", domain: padDomain(sides[0], sides[sides.length - 1], "log", 0.03), ticks: sides },
+      y: { type: "log", label: "late island density", domain: Y_RANGE },
+      series, ranges, hover: "point",
+      aria: "late island density against the box side at step " + T + ", one line per alpha, " + RULES[p.rule].label, emptyText: "No run reached step " + T.toLocaleString("en-US") + ".",
+    });
+  }
+  renderNScale($("lside-nscale"), shownN);
+  {
+    const rows = panels[0].rows, none = rows.filter((r) => !r.pts.length).map((r) => r.alpha), short = rows.filter((r) => r.pts.length && r.absent.length);
+    const parts = [], missing = [];
+    if (win) parts.push("mean over steps " + win + " in every box");
+    if (rows.some((r) => r.alpha === focus && r.pts.length)) parts.push("α " + focus + " highlighted: bars = smallest and largest seed value" + (focusFit ? ", thin line = its fit" : ""));
+    if (none.length) missing.push("no run reached this step at α " + listAnd(none));
+    if (short.length) missing.push("boxes that stop earlier are left out: " + short.map((r) => "α " + r.alpha + " L " + r.absent.join(", ")).join("; "));
+    const cap = $("lside-caption"); cap.textContent = parts.join(" · "); cap.dataset.tip = cap.textContent;
+    // what is missing at this step, on a line of its own that wraps, so none of it is cut off
+    const miss = $("lside-missing"); miss.textContent = missing.join(" · "); miss.hidden = !missing.length;
+  }
+
+  // ----- the second chart: the spatial entropy against α, one line per box (at load), or the slope of each line
+  // above against α. Its caption and missing-data line are set before it is drawn: on a wide screen the chart
+  // takes the height its card has left.
+  const slopeOn = state.lRight === "slope";
+  segControl($("lright-seg"), [{ value: "entropy", label: "entropy", title: "The spatial entropy ln A − S against α at this step, one line per box (E switches)" },
+    { value: "slope", label: "slope", title: "The slope of each α's line in the density chart, against α (E switches)" }], state.lRight, (v) => { state.lRight = v; renderAll(); });
+  $("lent-chart").hidden = slopeOn; $("slope-chart").hidden = !slopeOn;
+  $("lent-chart").replaceChildren(); $("slope-chart").replaceChildren();
+  const rcap = $("lright-caption"), rmiss = $("lright-missing");
+  const ecols = entropyCols(T), eSteps = (ecols.find((c) => c.pts.length) || { pts: [{ val: { steps: [] } }] }).pts[0].val.steps;
+  if (slopeOn) {
+    $("lright-title").textContent = "Slope vs α · step " + fmtStep(T);
+    $("q-lright").dataset.tip = "Slope: " + SLOPE_DEF;
+    legendFor($("lright-legend"), false);
+    const sSeries = [], sRanges = [], ends = [];
+    for (const p of panels) {
+      const st = lateStyle("size", p.rule), fr = p.rows.filter((r) => r.fit);
+      if (!fr.length) continue;
+      for (const r of fr) { sRanges.push({ x: r.alpha, lo: r.fit.b - r.fit.se, hi: r.fit.b + r.fit.se, color: r.alpha === focus ? "var(--accent)" : "var(--ink-2)" }); ends.push(r.fit.b - r.fit.se, r.fit.b + r.fit.se); }
+      sSeries.push({ color: "var(--ink-2)", opacity: 0.85, width: 1.6, dash: st.dash, points: fr.map((r) => [r.alpha, r.fit.b]), markers: true, line: true, shape: st.shape,
+        markerColor: (i) => fr[i].alpha === focus ? "var(--accent)" : "var(--ink-2)", style: st,
+        tipRows: (i) => { const r = fr[i]; return { title: "α " + r.alpha + " · step " + fmtStep(T) + " · " + RULES[p.rule].short, rows: [
+          { value: fmtSlope(r.fit), label: "slope, " + fitBoxes(r.fit) },
+          ...(r.fitNo60 && r.has60 ? [{ value: fmtSlope(r.fitNo60), label: "without L 60, " + r.fitNo60.n + " boxes" }] : [])] }; } });
+    }
+    {
+      const rows = panels[0].rows, few = rows.filter((r) => r.pts.length && !r.fit).map((r) => r.alpha);
+      const parts = ["straight line through ln(density) against ln(L), over the boxes drawn above", "bars: ± 1 standard error"];
+      if (rows.some((r) => r.fit && r.fitNo60 && r.has60)) parts.push("the tooltip also gives the slope without L 60");
+      rcap.textContent = parts.join(" · "); rcap.dataset.tip = rcap.textContent;
+      rmiss.textContent = few.length ? "no slope at α " + listAnd(few) + ": fewer than " + MIN_FIT + " boxes at this step" : ""; rmiss.hidden = !few.length;
+    }
+    drawLineChart($("slope-chart"), {
+      x: { type: "linear", label: "α", domain: [-0.04, 1.04] },
+      y: { type: "linear", label: "slope of ln(density) against ln(L)", domain: [Math.min(-1, Math.floor(Math.min(...ends))), Math.max(3, Math.ceil(Math.max(...ends)))] },
+      refs: [{ y: 0, label: "0: no trend with L" }, { y: 2, label: "2: density scales like N" }],
+      series: sSeries, ranges: sRanges, hover: "point",
+      aria: "slope of the late island density against the box side, for each alpha, at step " + T, emptyText: "No α has " + MIN_FIT + " boxes at step " + T.toLocaleString("en-US") + ".",
+    });
+  } else {
+    $("lright-title").textContent = "Spatial entropy vs α · step " + fmtStep(T);
+    $("q-lright").dataset.tip = ENT_VSL_TIP;
+    $("lright-legend").replaceChildren();
+    // one line per box through the α at which it has a value, in the colour of its N, named at its end
+    const eSeries = [], eRanges = [];
+    for (const L of sides) {
+      const pts = ecols.flatMap((c) => c.pts.filter((q) => q.e.L === L));
+      if (!pts.length) continue;
+      const color = nColor(pts[0].e.N);
+      for (const q of pts) eRanges.push({ x: q.e.alpha, lo: q.val.lo, hi: q.val.hi, color });
+      eSeries.push({ color, width: 2, points: pts.map((q) => [q.e.alpha, q.val.v]), markers: true, line: true, endLabel: "L " + L,
+        tipRows: (i) => { const { e, val } = pts[i], n = val.steps.length; return { title: "α " + e.alpha + " · L " + L + " · N " + e.N.toLocaleString("en-US"), rows: [
+          { color, style: ENT_POINT, value: fmt(val.v), label: "ln A − S" },
+          { value: fmt(val.lo) + " – " + fmt(val.hi), label: "range over " + val.seeds + " seed" + (val.seeds > 1 ? "s" : "") },
+          n > 1 ? { value: fmtStep(val.steps[0]) + "–" + fmtStep(val.steps[n - 1]), label: "mean over " + n + " saved lattices" } : { value: fmtStep(val.steps[0]), label: "saved lattice" }] }; } });
+    }
+    {
+      const parts = ["Where along α do the particles stop gathering at this step, and how does that move with the box side L?", "ln A − S: higher = more gathered"];
+      if (eSteps.length) parts.push(latticeText(eSteps), "bars = smallest and largest seed value");
+      rcap.textContent = parts.join(" · "); rcap.dataset.tip = rcap.textContent;
+      // what is missing, by box (the lines of this chart): boxes with the same missing α are named together
+      const none = ecols.filter((c) => !c.pts.length).map((c) => c.alpha), byL = new Map(), groups = new Map(), missing = [];
+      for (const c of ecols) if (c.pts.length) for (const L of c.absent) byL.set(L, [...(byL.get(L) || []), c.alpha]);
+      for (const [L, al] of [...byL].sort((a, b) => a[0] - b[0])) { const k = listAnd(al); groups.set(k, [...(groups.get(k) || []), L]); }
+      if (none.length) missing.push("no run reached this step at α " + listAnd(none));
+      if (groups.size) missing.push("runs that stop earlier are left out: " + [...groups].map(([al, Ls]) => "L " + Ls.join(", ") + " at α " + al).join("; "));
+      rmiss.textContent = missing.join(" · "); rmiss.hidden = !missing.length;
+    }
+    drawLineChart($("lent-chart"), {
+      x: { type: "linear", label: "α  (no runs from 0.5 to 0.8)", ...ENT_ALPHA_AXIS, ticks: [...ENT_ALPHA_AXIS.ticks.filter((a) => model.alphas.size.includes(a)), ...model.alphas.size.filter((a) => !ENT_ALPHA_AXIS.ticks.includes(a))] },
+      y: { type: "linear", label: "ln A − S", domain: [0, ENT_TOP], minChars: 3 }, refs: entropyRefs(true),   // short: the lines of the small boxes end near it
+      series: eSeries, ranges: eRanges, hover: "point", leaders: true,
+      aria: "spatial entropy against alpha at step " + T + ", one line per box side", emptyText: "No saved lattices in the last quarter up to step " + T.toLocaleString("en-US") + ".",
+    });
+  }
+
+  // ----- the same values as tables, in the bottom fold
+  const numbers = $("late-numbers"); numbers.replaceChildren();
+  const tbl = h("table", { class: "data" }, h("thead", {}, h("tr", {}, h("th", { text: "α" }), h("th", { class: "l", text: "island" }), sides.map((L) => h("th", { text: "L " + L })),
+    h("th", { text: "slope" }), h("th", { text: "± 1 SE" }), h("th", { text: "boxes" }), h("th", { text: "slope without L 60" }), h("th", { text: "± 1 SE" }))));
+  const tb = h("tbody");
+  model.alphas.size.forEach((alpha, i) => { for (const p of panels) {
+    const r = p.rows[i]; if (!r.pts.length) continue;
+    const by = new Map(r.pts.map((q) => [q.e.L, q.val.v]));
+    tb.append(h("tr", {}, h("td", { text: r.alpha }), h("td", { class: "l", text: RULES[p.rule].short }), sides.map((L) => h("td", { class: by.has(L) ? null : "dim", text: by.has(L) ? fmt(by.get(L)) : "–" })),
+      h("td", { class: "strong", text: r.fit ? r.fit.b.toFixed(2) : "–" }), h("td", { text: r.fit ? r.fit.se.toFixed(2) : "" }), h("td", { class: "dim", text: r.pts.length }),
+      h("td", { text: r.fitNo60 ? r.fitNo60.b.toFixed(2) : "–" }), h("td", { text: r.fitNo60 ? r.fitNo60.se.toFixed(2) : "" })));
+  } });
+  tbl.append(tb);
+  numbers.append(h("div", { class: "hint", text: "larger box · step " + T.toLocaleString("en-US") + (win ? " · mean over steps " + win : "") + " · the late island density of each box and the slope of each α's line" }), tbl);
+  if (!slopeOn && ecols.some((c) => c.pts.length)) {
+    const et = h("table", { class: "data" }, h("thead", {}, h("tr", {}, h("th", { text: "α" }), sides.map((L) => h("th", { text: "L " + L })))));
+    const eb = h("tbody");
+    for (const c of ecols) {
+      if (!c.pts.length) continue;
+      const by = new Map(c.pts.map((q) => [q.e.L, q.val.v]));
+      eb.append(h("tr", {}, h("td", { text: c.alpha }), sides.map((L) => h("td", { class: by.has(L) ? null : "dim", text: by.has(L) ? fmt(by.get(L)) : "–" }))));
+    }
+    et.append(eb);
+    numbers.append(h("div", { class: "hint", text: "ln A − S · step " + T.toLocaleString("en-US") + " · " + latticeText(eSteps) + " · the spatial entropy chart" }), et);
+  }
+}
+
+/* ---------- bottom folds: definitions and notes ---------- */
+function renderDefs() {
+  const dl = $("defs-body"); dl.replaceChildren();
+  const add = (t, d) => dl.append(h("dt", { text: t }), h("dd", { text: d }));
+  for (const r of RULE_ORDER) add("island: " + RULES[r].label, RULES[r].def + (RULES[r].caveat ? " " + RULES[r].caveat : ""));
+  add(ROUTES.density.label, ROUTES.density.def);
+  add(ROUTES.size.label, ROUTES.size.def + " L 90 at 2.4 per site is the 90 × 90 box at that density: both boxes share these runs, and the larger box has a fifth seed at α 0.85, 0.88, 0.92, 0.94 and 0.96.");
+  add("Matched N", "pairs within a factor " + MATCH_RATIO + ": L 60 ↔ 1.2/site, L 90 ↔ 2.4 (shared runs), L 120 ↔ 4.8, L 180 ↔ 9.6 (same N), L 240 ↔ 14.4.");
+  // the late window of each α with longer runs on, grouped: "steps 60,100 to 80,000 at α 0, 0.5 and 1; ..."
+  const byT = new Map();
+  for (const a of model.alphas.size) { const T = commonLateT(a); if (T) byT.set(T, [...(byT.get(T) || []), a]); }
+  const winText = [...byT.keys()].sort((a, b) => a - b).map((T) => {
+    const e = model.entriesFor("size", byT.get(T)[0]).find((x) => x.horizon === T), w = (e && e.late.window) || [0.75 * T, T];
+    return "steps " + w[0].toLocaleString("en-US") + " to " + w[1].toLocaleString("en-US") + " at α " + listAnd(byT.get(T));
+  }).join("; ");
+  add("Late value", "mean over the last quarter of the run: steps 15,100 to 20,000 in both boxes. With longer runs on, the larger box uses one window per α, the last quarter of the shortest run at that α, so every N is compared over the same steps" + (winText ? ": " + winText : "") + ". A run that went past that window also has its own last quarter, in the tooltip and the numbers table. Bars: smallest and largest seed value.");
+  add("vs L", "the larger box only: 2.4 particles per site, so N ≈ 2.4 L². One line per α: the late island density of every box whose runs reached the chosen step, each averaged over the last quarter of the run up to that step, so all boxes are compared over the same steps. A box whose runs stop earlier has no point. One α is highlighted, with the smallest and largest seed value as bars and its fitted line; the other α are drawn faint, and a click on one of their points highlights that α. Beside it, at the same step, the spatial entropy against α, one line per box: for each run the mean of ln A − S over its lattices saved in the same steps (one every 20,000), then the mean over the seeds, with the smallest and largest seed value as bars; its α axis is cut between 0.5 and 0.8, where no α was run. Its switch shows instead the slope of each α's line.");
+  add("Slope", SLOPE_DEF);
+  add("Spatial entropy", "ln A − S for the larger box, where S = −Σ p ln p over the sites, p is the share of all particles on a site and A = L² is the number of sites. It is 0 when every site holds the same number, and ln(A/m) when the particles are spread evenly over m sites; it uses no island. The Lab's spatial order is the same quantity divided by ln A (1 − S / ln A). Computed from every saved lattice (steps 0, 100, 500, 1,000, 2,000, 5,000, 10,000, 20,000, then every 20,000), so a change faster than 20,000 steps is not resolved. Curves: seed means; single seeds on request." + (ENT_EVEN == null ? "" : " At step 0, with the particles placed at random, its seed mean is " + ENT_START[0].toFixed(3) + " to " + ENT_START[1].toFixed(3) + ", depending on the box; the line marked random start is at their mean, " + ENT_EVEN.toFixed(3) + "."));
+  add("Curves", "seed means at 106 log-spaced steps up to 20,000, the same steps in both boxes (the runs sample every 25 steps to 5,000, then every 100). Step 0 is off the log axis. Colour = N, the total particle count, on one log scale for both boxes. With longer runs on, the larger box continues on the same grid to the end of its runs, step " + runEnds().join(" to ") + " depending on the box and α; a dot marks where each run ends, and the larger box's curves carry their N at that end.");
+  const st = (model.data.settings) || {};
+  add("Settings", Object.entries(st).map(([k, v]) => (k === "sensitivity" ? "sensitivity β" : k) + ": " + v).join(" · ") + (model.data.generated ? " · data " + model.data.generated.replace("T", " ") : ""));
+}
+function renderFindings() {
+  const slot = $("findings-slot"); let items = [];
+  try { items = JSON.parse($("findings").textContent || "[]"); } catch (e) { items = []; }
+  slot.replaceChildren();
+  if (!Array.isArray(items) || !items.length) return;
+  slot.append(h("ul", {}, items.map((it) => h("li", {}, it.title ? h("b", { text: it.title + " " }) : null, it.text || ""))));
+}
+
+/* ---------- explanations (data-tip) ----------
+   Shown after hovering for TIP_DELAY or at once on keyboard focus; a click on a "?" pins it until a click elsewhere
+   or Esc. It sits below its element, or above when there is no room. */
+const pop = $("pop");
+let popEl = null, popPinned = false, popTimer = 0;
+const TIP_DELAY = 1000;   // ms of hovering before a tooltip shows
+function placePop(el) {
+  const r = el.getBoundingClientRect(), pad = 6;
+  pop.style.left = "0px"; pop.style.top = "0px";
+  const w = pop.offsetWidth, hh = pop.offsetHeight;
+  const x = Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2));
+  let y = r.bottom + pad;
+  if (y + hh > window.innerHeight - 4) y = r.top - hh - pad;
+  if (y < 4) y = Math.max(4, Math.min(window.innerHeight - hh - 4, r.bottom + pad));
+  pop.style.left = x + "px"; pop.style.top = y + "px";
+}
+function showPop(el) {
+  const text = el.dataset.tip; if (!text) return;
+  popEl = el; pop.textContent = text; pop.hidden = false; placePop(el);
+}
+function hidePop(force) {
+  if (popPinned && !force) return;
+  clearTimeout(popTimer); popTimer = 0; popPinned = false; popEl = null; pop.hidden = true; pop.classList.remove("pinned");
+  document.querySelectorAll(".q.on").forEach((q) => q.classList.remove("on"));
+}
+const tipTarget = (ev) => ev.target && ev.target.closest ? ev.target.closest("[data-tip]") : null;
+document.addEventListener("pointerover", (ev) => {
+  const el = tipTarget(ev); if (!el || popPinned) return;
+  clearTimeout(popTimer); popTimer = setTimeout(() => showPop(el), TIP_DELAY);
+});
+document.addEventListener("pointerout", (ev) => {
+  const el = tipTarget(ev); if (!el || popPinned) return;
+  if (ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+  clearTimeout(popTimer); popTimer = 0;
+  if (popEl === el) hidePop();
+});
+// keyboard focus shows the tooltip at once; a mouse click (which also focuses) does not
+document.addEventListener("focusin", (ev) => { const el = tipTarget(ev); if (el && !popPinned && el.matches(":focus-visible")) showPop(el); });
+document.addEventListener("focusout", (ev) => { const el = tipTarget(ev); if (el && !popPinned && popEl === el) hidePop(); });
+document.addEventListener("click", (ev) => {
+  const q = ev.target.closest ? ev.target.closest(".q") : null;
+  if (q) {
+    ev.preventDefault();
+    if (popPinned && popEl === q) { hidePop(true); return; }
+    hidePop(true); showPop(q); popPinned = true; pop.classList.add("pinned"); q.classList.add("on"); return;
+  }
+  if (popPinned && !pop.contains(ev.target)) hidePop(true);
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { hidePop(true); return; }
+  if ((ev.key === "Enter" || ev.key === " ") && ev.target.classList && ev.target.classList.contains("q")) { ev.preventDefault(); ev.target.click(); }
+});
+window.addEventListener("scroll", () => { if (popEl) placePop(popEl); }, true);
+window.addEventListener("resize", () => { if (popEl) hidePop(true); });
+
+/* ---------- keyboard ---------- */
+function onKey(ev) {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const k = ev.key;
+  if (k === "ArrowLeft" || k === "ArrowRight") {
+    const av = alphasAvailable(); const i = av.indexOf(state.alpha); if (i < 0) return;
+    const j = Math.max(0, Math.min(av.length - 1, i + (k === "ArrowRight" ? 1 : -1)));
+    if (j !== i) { state.alpha = av[j]; renderAll(); } ev.preventDefault();
+  } else if (k >= "1" && k <= "3" && !entropyGrid()) { toggleRule(RULE_ORDER[+k - 1]); renderAll(); }   // the entropy uses no island
+  else if ((k === "r" || k === "R") && state.view !== "L") {   // both → denser → larger → both; "vs L" has no box choice
+    if (bothRoutes()) state.routes = new Set(["density"]); else if (state.routes.has("density")) state.routes = new Set(["size"]); else state.routes = new Set(["density", "size"]);
+    renderAll();
+  }
+  else if (k === "g" || k === "G") { state.view = state.view === "grid" ? "charts" : "grid"; renderAll(); }
+  else if (k === "l" || k === "L") { state.view = "L"; renderAll(); }
+  else if ((k === "x" || k === "X") && state.view !== "L") { state.axis = state.axis === "log" ? "linear" : "log"; renderAll(); }
+  else if ((k === "e" || k === "E") && state.view === "grid" && state.routes.has("size")) { state.gridShow = state.gridShow === "entropy" ? "density" : "entropy"; renderAll(); }
+  else if ((k === "e" || k === "E") && state.view === "L") { state.lRight = state.lRight === "entropy" ? "slope" : "entropy"; renderAll(); }
+}
+/* the menu: its button opens and closes it; a click outside or Esc closes it; it stays open while its switches are used */
+function setMenu(open, refocus) { if (state.menu === open) return; state.menu = open; renderRail(); if (refocus) $("menu-btn").focus(); }
+function wireMenu() {
+  $("menu-btn").addEventListener("click", () => { hidePop(true); setMenu(!state.menu); });
+  $("menu-reset").addEventListener("click", () => { resetChoice(); renderAll(); });
+  document.addEventListener("pointerdown", (ev) => { if (state.menu && !$("menuwrap").contains(ev.target) && !pop.contains(ev.target)) setMenu(false); });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && state.menu && !popPinned) setMenu(false, true); }, true);
+}
+
+/* ---------- boot ---------- */
+function boot() {
+  renderFindings();
+  let data = null;
+  try { data = JSON.parse($("page-data").textContent); }
+  catch (err) { const b = $("load-error"); b.className = "banner"; b.textContent = "This page has no data: build it with build/make_page.py."; b.hidden = false; data = { size: { steps: [], entries: [] }, density: { steps: [], entries: [] } }; }
+  let entropyData = null;
+  try { entropyData = JSON.parse($("entropy-data").textContent || "null"); } catch (err) { entropyData = null; }
+  model = buildModel(data, entropyData); fitYRange(data); fitEntropy();
+  if (!model.alphas.size.includes(state.alpha) && model.alphas.size.length) state.alpha = model.alphas.size[0];
+  document.addEventListener("keydown", onKey); wireMenu();
+  renderAll(); renderDefs();
+  let raf = 0, lastW = window.innerWidth, lastH = window.innerHeight;
+  window.addEventListener("resize", () => { if (window.innerWidth === lastW && window.innerHeight === lastH) return; lastW = window.innerWidth; lastH = window.innerHeight; cancelAnimationFrame(raf); raf = requestAnimationFrame(renderCharts); });
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (mq.addEventListener) mq.addEventListener("change", () => renderAll());
+  new MutationObserver(() => renderAll()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+}
+boot();
+})();
+</script>
+</body>
+</html>

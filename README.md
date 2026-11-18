@@ -5,8 +5,8 @@ and cluster. The C++ simulation runs directly in the browser.
 
 - **[Open LGCA Lab](https://nacapule.github.io/LGCA/lgca-viz/lgca-lab.html)** —
   change the rules, replay a run, inspect sites and export measurements.
-- **[Open the island study dashboard](https://nacapule.github.io/LGCA/results/islands-2026-10-06/island-study.html)** —
-  compare island density over time and across particle counts.
+- **[Open the island study dashboard](https://nacapule.github.io/LGCA/results/islands-2026-11-17/island-study.html)** —
+  explore island density and spatial entropy across box sizes, α and time.
 
 ## Island study
 
@@ -14,9 +14,17 @@ An island is a connected group of occupied sites. The dashboard compares three w
 to choose an island. The runs add particles either by filling a fixed box more
 densely or by enlarging the box at a fixed density.
 
-[Island density over time](results/islands-2026-10-06/island-density-vs-time.csv) ·
-[Late densities and seed ranges](results/islands-2026-10-06/late-island-density.csv) ·
-[Measurements from saved lattices](results/islands-2026-10-06/islands-at-saved-steps.csv)
+The larger-box runs reach 1.28 million steps for every α tested except α = 0, which
+reaches 320,000. Use **vs L** to compare boxes at the same step and **single seeds**
+to see how individual runs differ.
+
+[Island density over time](results/islands-2026-11-17/island-density-vs-time.csv) ·
+[Late densities and seed ranges](results/islands-2026-11-17/late-island-density.csv) ·
+[Measurements from saved lattices](results/islands-2026-11-17/islands-at-saved-steps.csv) ·
+[Spatial entropy data](results/islands-2026-11-17/entropy-page.json)
+
+The [October island study](https://nacapule.github.io/LGCA/results/islands-2026-10-06/island-study.html)
+is available with [its data](results/islands-2026-10-06/).
 
 ## Density and α study
 
@@ -46,5 +54,5 @@ At α = 1 it averages them per particle.
 ## Resumen
 
 El Lab permite cambiar las reglas, inspeccionar sitios y exportar mediciones desde
-el navegador. El estudio de islas compara cómo se agrupan las partículas al aumentar
-la densidad o el tamaño de la caja. Arriba están los enlaces al Lab, las gráficas y los datos.
+el navegador. El estudio de islas muestra la densidad de las islas y la entropía
+espacial a lo largo del tiempo y para distintos tamaños de caja.

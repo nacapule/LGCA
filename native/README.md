@@ -109,7 +109,7 @@ With `--states`, the lattice of every checkpoint is saved beside it. With `--che
 where DIR is a `run` folder of the same job, every saved row and checkpoint of DIR must
 come out the same. `trace_sweep.py` traces every job of a config in parallel.
 
-### The island study
+### October island study
 
 The island study's runs come from the six configs in [sweeps/](sweeps/), run in seven
 stages. Each stage continues the traces that the stages before it left in the same
@@ -157,6 +157,11 @@ python3 build/page_data.py     # seed means and late values
 python3 build/make_page.py     # island-study.html
 python3 build/export_csv.py    # the three CSV files
 ```
+
+### Current island study dashboard
+
+Run `python3 build/make_page.py` in [the November study folder](../results/islands-2026-11-17/)
+to build the standalone dashboard from the included island and entropy data.
 
 ### Other modes
 

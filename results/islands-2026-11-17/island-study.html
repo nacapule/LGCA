@@ -62,11 +62,9 @@ svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
 .card.lright > .chart { height: min(max(300px, 34vh), 460px); }
 .card.lright > #lent-chart { height: min(max(380px, 46vh), 600px); }
 .card.lside .chart.split > .chart { height: min(max(380px, 46vh), 600px); }
-/* vs L on a wide screen: the two charts side by side, one screen tall; the second chart fills its card, whatever
-   the length of its caption */
+/* vs L on a wide screen: the two charts side by side, one screen tall */
 @media (min-width: 1100px) {
   #lview { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: stretch; }
-  #lview .caption { white-space: normal; }
   #lview .card.lside > .chart { height: clamp(380px, calc(100vh - 196px), 760px); }
   #lview .card.lright > .chart, #lview .card.lright > #lent-chart { height: auto; flex: 1 1 0; min-height: 300px; }
   #lview .card.lside .chart.split > .chart { height: clamp(300px, calc((100vh - 220px) / 2), 600px); }
@@ -108,7 +106,7 @@ svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
 .q::after { content: ""; position: absolute; inset: -2px; }
 .q:hover, .q.on, .q:focus-visible { color: var(--ink); border-color: var(--ink-2); }
 /* explanations (data-tip): on hover, on keyboard focus, or pinned by a click on a "?" */
-.pop { position: fixed; z-index: 60; max-width: 320px; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,0.18), 0 0 0 1px var(--line); border-radius: 6px; padding: 7px 10px; font-size: 13.5px; line-height: 1.4; white-space: pre-line; pointer-events: none; }
+.pop { position: fixed; z-index: 60; max-width: min(320px, calc(100vw - 8px)); max-height: calc(100vh - 8px); overflow-y: auto; overscroll-behavior: contain; background: var(--surface); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,0.18), 0 0 0 1px var(--line); border-radius: 6px; padding: 7px 10px; font-size: 13.5px; line-height: 1.4; white-space: pre-line; pointer-events: none; }
 .pop.pinned { pointer-events: auto; }
 .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; background: var(--surface-2); padding: 2px; border-radius: 7px; }
 .seg button {
@@ -277,17 +275,13 @@ details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
     </div>
     <div class="charts" id="lview" hidden>
       <section class="card lside" id="lside">
-        <div class="head"><h2 id="lside-title">Late island density against L</h2><div class="legend" id="lside-legend"></div><div class="nscale" id="lside-nscale"></div></div>
+        <div class="head"><h2 id="lside-title">Late island density against L</h2><span class="q" id="q-lside" tabindex="0" role="button" aria-label="about this chart and missing runs">?</span><div class="legend" id="lside-legend"></div><div class="nscale" id="lside-nscale"></div></div>
         <div class="chart" id="lside-chart"></div>
-        <p class="caption" id="lside-caption"></p>
-        <div class="hint" id="lside-missing" hidden></div>
       </section>
       <section class="card lright" id="lright">
         <div class="head"><h2 id="lright-title">Spatial entropy against α</h2><span class="q" id="q-lright" tabindex="0" role="button" aria-label="about this chart">?</span><div class="legend" id="lright-legend"></div><div class="opts"><div class="seg" id="lright-seg" role="group" aria-label="chart: spatial entropy or slope"></div></div></div>
         <div class="chart" id="lent-chart"></div>
         <div class="chart" id="slope-chart" hidden></div>
-        <p class="caption" id="lright-caption"></p>
-        <div class="hint" id="lright-missing" hidden></div>
       </section>
     </div>
   </div>
@@ -1010,7 +1004,7 @@ const ENT_TIP = ENT_DEF
 /* the "?" of the entropy against α in "vs L" */
 const ENT_VSL_TIP = ENT_DEF
   + "It is the Lab's spatial order times ln A (the Lab shows 1 − S / ln A).\n"
-  + "Here, at the chosen step: for each run, the mean over its lattices saved in the same steps as the island density beside it (one every 20k), then the mean over the seeds. Bars: smallest and largest seed value. One line per box; a box whose runs stop before the step has no point at that α.\n"
+  + "One line per box. The bars span the lowest to highest seed value.\n"
   + "The α axis compresses the gap between 0 and 0.5. Values from 0.5 to 1 are spread out.";
 function entropySeriesFor(alpha) {
   const means = [], singles = [], shownN = [];
@@ -1286,29 +1280,23 @@ function renderVsL() {
   renderNScale($("lside-nscale"), shownN);
   {
     const rows = panels[0].rows, none = rows.filter((r) => !r.pts.length).map((r) => r.alpha), short = rows.filter((r) => r.pts.length && r.absent.length);
-    const parts = [], missing = [];
+    const parts = ["One line per α."];
     if (win) parts.push("mean over steps " + win + " in every box");
     if (rows.some((r) => r.alpha === focus && r.pts.length)) parts.push("α " + focus + " highlighted: bars = smallest and largest seed value" + (focusFit ? ", thin line = its fit" : ""));
-    if (none.length) missing.push("no run reached this step at α " + listAnd(none));
-    if (short.length) missing.push("boxes that stop earlier are left out: " + short.map((r) => "α " + r.alpha + " L " + r.absent.join(", ")).join("; "));
-    const cap = $("lside-caption"); cap.textContent = parts.join(" · "); cap.dataset.tip = cap.textContent;
-    // what is missing at this step, on a line of its own that wraps, so none of it is cut off
-    const miss = $("lside-missing"); miss.textContent = missing.join(" · "); miss.hidden = !missing.length;
+    if (none.length) parts.push("no run reached this step at α " + listAnd(none));
+    if (short.length) parts.push("boxes that stop earlier are left out: " + short.map((r) => "α " + r.alpha + " L " + r.absent.join(", ")).join("; "));
+    $("q-lside").dataset.tip = parts.join("\n");
   }
 
-  // ----- the second chart: the spatial entropy against α, one line per box (at load), or the slope of each line
-  // above against α. Its caption and missing-data line are set before it is drawn: on a wide screen the chart
-  // takes the height its card has left.
+  // ----- the second chart: spatial entropy by box, or the slope of each density line, against α
   const slopeOn = state.lRight === "slope";
   segControl($("lright-seg"), [{ value: "entropy", label: "entropy", title: "The spatial entropy ln A − S against α at this step, one line per box (E switches)" },
     { value: "slope", label: "slope", title: "The slope of each α's line in the density chart, against α (E switches)" }], state.lRight, (v) => { state.lRight = v; renderAll(); });
   $("lent-chart").hidden = slopeOn; $("slope-chart").hidden = !slopeOn;
   $("lent-chart").replaceChildren(); $("slope-chart").replaceChildren();
-  const rcap = $("lright-caption"), rmiss = $("lright-missing");
   const ecols = entropyCols(T), eSteps = (ecols.find((c) => c.pts.length) || { pts: [{ val: { steps: [] } }] }).pts[0].val.steps;
   if (slopeOn) {
     $("lright-title").textContent = "Slope vs α · step " + fmtStep(T);
-    $("q-lright").dataset.tip = "Slope: " + SLOPE_DEF;
     legendFor($("lright-legend"), false);
     const sSeries = [], sRanges = [], ends = [];
     for (const p of panels) {
@@ -1323,10 +1311,7 @@ function renderVsL() {
     }
     {
       const rows = panels[0].rows, few = rows.filter((r) => r.pts.length && !r.fit).map((r) => r.alpha);
-      const parts = ["straight line through ln(density) against ln(L), over the boxes drawn above", "bars: ± 1 standard error"];
-      if (rows.some((r) => r.fit && r.fitNo60 && r.has60)) parts.push("the tooltip also gives the slope without L 60");
-      rcap.textContent = parts.join(" · "); rcap.dataset.tip = rcap.textContent;
-      rmiss.textContent = few.length ? "no slope at α " + listAnd(few) + ": fewer than " + MIN_FIT + " boxes at this step" : ""; rmiss.hidden = !few.length;
+      $("q-lright").dataset.tip = SLOPE_DEF + (few.length ? "\nNo slope at α " + listAnd(few) + " with fewer than " + MIN_FIT + " boxes at this step." : "");
     }
     drawLineChart($("slope-chart"), {
       x: { type: "linear", label: "α", domain: [-0.04, 1.04] },
@@ -1337,7 +1322,6 @@ function renderVsL() {
     });
   } else {
     $("lright-title").textContent = "Spatial entropy vs α · step " + fmtStep(T);
-    $("q-lright").dataset.tip = ENT_VSL_TIP;
     $("lright-legend").replaceChildren();
     // one line per box through the α at which it has a value, in the colour of its N, named at its end
     const eSeries = [], eRanges = [];
@@ -1353,16 +1337,15 @@ function renderVsL() {
           n > 1 ? { value: fmtStep(val.steps[0]) + "–" + fmtStep(val.steps[n - 1]), label: "mean over " + n + " saved lattices" } : { value: fmtStep(val.steps[0]), label: "saved lattice" }] }; } });
     }
     {
-      const parts = ["Where along α do the particles stop gathering at this step, and how does that move with the box side L?", "ln A − S: higher = more gathered"];
-      if (eSteps.length) parts.push(latticeText(eSteps), "bars = smallest and largest seed value");
-      rcap.textContent = parts.join(" · "); rcap.dataset.tip = rcap.textContent;
+      const parts = [ENT_VSL_TIP];
+      if (eSteps.length) parts.push(latticeText(eSteps));
       // what is missing, by box (the lines of this chart): boxes with the same missing α are named together
-      const none = ecols.filter((c) => !c.pts.length).map((c) => c.alpha), byL = new Map(), groups = new Map(), missing = [];
+      const none = ecols.filter((c) => !c.pts.length).map((c) => c.alpha), byL = new Map(), groups = new Map();
       for (const c of ecols) if (c.pts.length) for (const L of c.absent) byL.set(L, [...(byL.get(L) || []), c.alpha]);
       for (const [L, al] of [...byL].sort((a, b) => a[0] - b[0])) { const k = listAnd(al); groups.set(k, [...(groups.get(k) || []), L]); }
-      if (none.length) missing.push("no run reached this step at α " + listAnd(none));
-      if (groups.size) missing.push("runs that stop earlier are left out: " + [...groups].map(([al, Ls]) => "L " + Ls.join(", ") + " at α " + al).join("; "));
-      rmiss.textContent = missing.join(" · "); rmiss.hidden = !missing.length;
+      if (none.length) parts.push("no run reached this step at α " + listAnd(none));
+      if (groups.size) parts.push("runs that stop earlier are left out: " + [...groups].map(([al, Ls]) => "L " + Ls.join(", ") + " at α " + al).join("; "));
+      $("q-lright").dataset.tip = parts.join("\n");
     }
     drawLineChart($("lent-chart"), {
       x: { type: "linear", label: "α", ...ENT_ALPHA_AXIS, ticks: [...ENT_ALPHA_AXIS.ticks.filter((a) => model.alphas.size.includes(a)), ...model.alphas.size.filter((a) => !ENT_ALPHA_AXIS.ticks.includes(a))] },
@@ -1371,6 +1354,8 @@ function renderVsL() {
       aria: "spatial entropy against alpha at step " + T + ", one line per box side", emptyText: "No saved lattices in the last quarter up to step " + T.toLocaleString("en-US") + ".",
     });
   }
+
+  if (popEl === $("q-lside") || popEl === $("q-lright")) showPop(popEl);
 
   // ----- the same values as tables, in the bottom fold
   const numbers = $("late-numbers"); numbers.replaceChildren();

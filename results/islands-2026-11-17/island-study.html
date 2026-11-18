@@ -885,7 +885,7 @@ function renderRail() {
     cb.addEventListener("change", () => { state.commonAlpha = cb.checked; renderAll(); });
     ao.append(h("label", { class: "check" + (forced ? " off" : ""), for: "opt-common", "data-tip": "Only the " + ca.length + " α run in both boxes (" + ca.join(", ") + "): the same panels in every setting." + (forced ? "\nOn while matched N is on." : "") }, cb, "common α"));
   }
-  $("alpha-hint").textContent = alphaNote || (vsL && !hasLineAt(state.alpha, state.stepL) ? "no line at this step" : "");
+  $("alpha-hint").textContent = alphaNote;
   segControl($("view-seg"), [{ value: "charts", label: "one α", title: "One α at a time: island density and spatial entropy over time, then the late island density against N (G switches)" }, { value: "grid", label: "all α", title: "Every α as small panels: island density or spatial entropy over time (G switches)" },
     { value: "L", label: "vs L", title: "Larger box at one step: the late island density against the box side L, one line per α, and beside it the spatial entropy against α, one line per box, or the slope of each density line (L key)" }], state.view, (v) => { state.view = v; renderAll(); });
   if (popEl && !popEl.isConnected) hidePop(true);   // its control was just redrawn
@@ -1205,7 +1205,6 @@ function lRows(T, rule) {
   });
 }
 const stepHasLines = (T) => model.alphas.size.some((a) => model.entriesFor("size", a).filter((e) => lateAtStep(e, T)).length >= 2);
-const hasLineAt = (alpha, T) => model.entriesFor("size", alpha).some((e) => lateAtStep(e, T));
 function ensureStep() { if (!stepHasLines(state.stepL)) state.stepL = L_STEPS.find(stepHasLines) || 80000; }
 const fmtSlope = (f) => f.b.toFixed(2) + " ± " + f.se.toFixed(2);
 const fitBoxes = (f) => "L " + f.L0 + " to " + f.L1 + ", " + f.n + " boxes";

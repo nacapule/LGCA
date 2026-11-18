@@ -1236,15 +1236,14 @@ function renderVsL() {
   const panels = rules.map((rule) => ({ rule, rows: lRows(T, rule) }));
   const first = panels[0].rows.find((r) => r.pts.length), win = first ? first.pts[0].val.win : null;
   const focusFit = panels.some((p) => p.rows.some((r) => r.alpha === focus && r.fit));
-  const legendFor = (host, withFit) => {
+  const legendFor = (host) => {
     host.replaceChildren();
     for (const r of rules) host.append(h("span", { class: "item", "data-tip": RULES[r].def }, glyph(lateStyle("size", r), "var(--ink-2)"), RULES[r].chip));
-    if (withFit && focusFit) host.append(h("span", { class: "item", "data-tip": "The straight line fitted through the highlighted α's points: ln(density) against ln(L). Its slope is that α's point under \"slope\" in the other chart of this view." }, glyph({ width: 1.4 }, "var(--accent)"), "fit, α " + focus));
   };
 
   // ----- density against L: one line per α, the highlighted one on top with its seed ranges and its fit
   $("lside-title").textContent = "Late island density vs L · step " + fmtStep(T);
-  legendFor($("lside-legend"), true);
+  legendFor($("lside-legend"));
   const host = $("lside-chart"); host.replaceChildren(); host.classList.toggle("split", split);
   const shownN = [];
   for (const p of panels) { p.host = split ? h("div", { class: "chart" }) : host; if (split) host.append(p.host); }
@@ -1282,7 +1281,8 @@ function renderVsL() {
     const rows = panels[0].rows, none = rows.filter((r) => !r.pts.length).map((r) => r.alpha), short = rows.filter((r) => r.pts.length && r.absent.length);
     const parts = ["One line per α."];
     if (win) parts.push("mean over steps " + win + " in every box");
-    if (rows.some((r) => r.alpha === focus && r.pts.length)) parts.push("α " + focus + " highlighted: bars = smallest and largest seed value" + (focusFit ? ", thin line = its fit" : ""));
+    if (rows.some((r) => r.alpha === focus && r.pts.length)) parts.push("The bars for α " + focus + " span the lowest to highest seed value.");
+    if (focusFit) parts.push("The thin line is the fit for the highlighted α. Its slope is shown in the slope chart.");
     if (none.length) parts.push("no run reached this step at α " + listAnd(none));
     if (short.length) parts.push("boxes that stop earlier are left out: " + short.map((r) => "α " + r.alpha + " L " + r.absent.join(", ")).join("; "));
     $("q-lside").dataset.tip = parts.join("\n");
@@ -1297,7 +1297,7 @@ function renderVsL() {
   const ecols = entropyCols(T), eSteps = (ecols.find((c) => c.pts.length) || { pts: [{ val: { steps: [] } }] }).pts[0].val.steps;
   if (slopeOn) {
     $("lright-title").textContent = "Slope vs α · step " + fmtStep(T);
-    legendFor($("lright-legend"), false);
+    legendFor($("lright-legend"));
     const sSeries = [], sRanges = [], ends = [];
     for (const p of panels) {
       const st = lateStyle("size", p.rule), fr = p.rows.filter((r) => r.fit);

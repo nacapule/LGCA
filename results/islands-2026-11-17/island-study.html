@@ -213,12 +213,12 @@ details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
     <div class="bar" id="rail" role="group" aria-label="controls">
       <div class="seg view" id="view-seg" role="group" aria-label="view"></div>
       <div class="blk" id="dim-alpha">
-        <span class="lab"><span style="text-transform: none; font-size: 14px">α</span> <span class="q" id="q-alpha" tabindex="0" role="button" aria-label="How alpha affects alignment" data-tip="α controls how strongly crowding can amplify alignment. At α = 0, the field sums the particle direction vectors. At α = 1, it averages them. In general, the sum for the site and its six neighbours is divided by M^α, where M counts the particles on those seven sites.">?</span></span>
+        <span class="lab"><span style="text-transform: none; font-size: 14px">α</span> <span class="q" id="q-alpha" tabindex="0" role="button" aria-label="How alpha affects alignment" data-tip="In general, the sum for the site and its six neighbours is divided by M^α, where M counts the particles on those seven sites. At α = 0, the field sums the particle direction vectors. At α = 1, it averages them.&#10;&#10;α controls how strongly crowding can amplify alignment.">?</span></span>
         <div class="seg" id="alpha-seg" role="group" aria-label="alpha"></div>
         <span class="hint" id="alpha-hint"></span>
       </div>
       <div class="blk" id="dim-step" hidden>
-        <span class="lab">Step <span class="q" id="q-step" tabindex="0" role="button" aria-label="How the step comparison works" data-tip="Pick how far into the runs to compare. Both charts use the last quarter up to that step, so the 80k comparison looks at the last 20,000 steps. Density uses the samples in that window. Entropy uses the saved lattices in the same window. Each point averages across seeds.">?</span></span>
+        <span class="lab">Step <span class="q" id="q-step" tabindex="0" role="button" aria-label="How the step comparison works" data-tip="Both charts use the last quarter up to that step, so the 80k comparison looks at the last 20,000 steps. Density uses the samples in that window. Entropy uses the saved lattices in the same window. Each point averages across seeds.&#10;&#10;Pick how far into the runs to compare.">?</span></span>
         <div class="seg" id="step-seg" role="group" aria-label="step"></div>
       </div>
       <div class="blk" id="dim-axis">
@@ -906,7 +906,7 @@ function renderRail() {
   if (vsL) segControl($("step-seg"), L_STEPS.map((T) => ({ value: T, label: fmtStep(T), disabled: !stepHasLines(T), title: stepHasLines(T) ? null : "A size comparison needs at least two lattices that reached this step at the same α." })), state.stepL, (T) => { state.stepL = T; renderAll(); });
   chipControl($("presets"), PRESETS.map((p) => ({ value: p.id, label: p.label, title: p.tip })), (id) => presetOn(PRESETS.find((p) => p.id === id)), applyPreset);
   // boxes
-  $("q-route").dataset.tip = "Choose how to add particles. The 90 × 90 sweep increases the density at fixed size. The larger-box sweep increases the size at fixed density. Thin lines and hollow markers mark the first sweep. Thick lines and filled markers mark the second.";
+  $("q-route").dataset.tip = "The 90 × 90 sweep increases the density at fixed size. The larger-box sweep increases the size at fixed density.\n\nChoose how to add particles. Thin lines and hollow markers mark the first sweep. Thick lines and filled markers mark the second.";
   const routeOpts = ROUTE_ORDER.map((r) => ({ value: r, label: ROUTES[r].chip, title: ROUTES[r].def, glyph: boxSample(r) }));
   chipControl($("route-picks"), routeOpts, (r) => state.routes.has(r), (r) => { toggleRoute(r); renderAll(); });
   const opts = $("route-opts"); opts.replaceChildren();
@@ -923,7 +923,7 @@ function renderRail() {
     opts.append(h("label", { class: "check" + (larger ? "" : " off"), for: "opt-longer", "data-tip": "Turn this on to follow the larger-box runs to their ends. Turn it off to compare both sweeps through 20,000 steps. For late density versus N, the longer runs are compared over a shared window that ends with the shortest run at that α." }, cb, "longer runs"));
   }
   // islands
-  $("q-rule").dataset.tip = "Choose which group of sites to measure. Island density is the average number of particles per site within that group. When comparing definitions, dashed lines show old, solid lines show new, and dotted lines show densest.";
+  $("q-rule").dataset.tip = "Choose which group of sites to measure. Island density is the average number of particles per site within that group.\n\nWhen comparing definitions, dashed lines show old, solid lines show new, and dotted lines show densest.";
   const ruleOpts = RULE_ORDER.map((r, i) => ({ value: r, label: RULES[r].chip, kbd: String(i + 1), title: RULES[r].def + (RULES[r].caveat ? "\n" + RULES[r].caveat : ""), glyph: islandSample(r) }));
   chipControl($("rule-picks"), ruleOpts, (r) => state.rules.has(r), (r) => { toggleRule(r); renderAll(); });
   // α
@@ -1055,9 +1055,9 @@ function fitEntropy() {
 }
 const ENT_READING = "Higher values mean the particles are more concentrated. Zero means the particles are spread evenly across the whole lattice.";
 const ENT_FORMULA = "The axis shows ln A − S, the difference between the entropy of an even spread and the measured entropy. A is the number of sites and S is the Shannon entropy.";
-const ENT_TIP = ENT_READING
-  + "\nEach thick line averages the seeds for one lattice size. Turn on single seeds to see the runs separately."
-  + "\n" + ENT_FORMULA;
+const ENT_TIP = ENT_FORMULA
+  + "\nEach thick line averages the seeds for one lattice size."
+  + "\n\n" + ENT_READING + "\nTurn on single seeds to see the runs separately.";
 function entropySeriesFor(alpha) {
   const means = [], singles = [], shownN = [];
   if (!state.routes.has("size")) return { series: [], shownN };
@@ -1331,12 +1331,13 @@ function renderVsL() {
   renderNScale($("lside-nscale"), shownN);
   {
     const rows = panels[0].rows, none = rows.filter((r) => !r.pts.length).map((r) => r.alpha), short = rows.filter((r) => r.pts.length && r.absent.length);
-    const parts = ["Follow a line to see how island density changes with lattice size at one α. Click a point to highlight its α."];
-    if (rows.some((r) => r.alpha === focus && r.pts.length)) parts.push("Bars on the highlighted line span the lowest and highest seed averages.");
+    const parts = [];
     if (win) parts.push("Every size is averaged over steps " + win + ".");
+    if (rows.some((r) => r.alpha === focus && r.pts.length)) parts.push("Bars on the highlighted line span the lowest and highest seed averages.");
     if (focusFit) parts.push("The thin line shows the fit for the highlighted α.");
     if (none.length) parts.push("No run reached this step at α " + listAnd(none) + ".");
     if (short.length) parts.push("Sizes omitted because the runs ended earlier:\n" + short.map((r) => "α " + r.alpha + " · L " + r.absent.join(", ")).join("\n"));
+    parts.push("", "Follow a line to see how island density changes with lattice size at one α. Click a point to highlight its α.");
     $("q-lside").dataset.tip = parts.join("\n");
   }
 
@@ -1358,7 +1359,7 @@ function renderVsL() {
         n > 1 ? { value: fmtStep(val.steps[0]) + "–" + fmtStep(val.steps[n - 1]), label: n + " saved lattices per seed" } : { value: fmtStep(val.steps[0]), label: "Saved step" }] }; } });
   }
   {
-    const parts = [ENT_READING, "Follow one line to see how concentration changes with α at a fixed lattice size. Bars span the lowest and highest seed averages."];
+    const parts = [ENT_FORMULA, "Bars span the lowest and highest seed averages.", "The chart compresses the gap between α = 0 and 0.5. From 0.5 to 1 the scale is linear."];
     if (eSteps.length) parts.push(latticeText(eSteps));
     // what is missing, by box (the lines of this chart): boxes with the same missing α are named together
     const none = ecols.filter((c) => !c.pts.length).map((c) => c.alpha), byL = new Map(), groups = new Map();
@@ -1366,7 +1367,7 @@ function renderVsL() {
     for (const [L, al] of [...byL].sort((a, b) => a[0] - b[0])) { const k = listAnd(al); groups.set(k, [...(groups.get(k) || []), L]); }
     if (none.length) parts.push("No run reached this step at α " + listAnd(none) + ".");
     if (groups.size) parts.push("Sizes omitted because the runs ended earlier:\n" + [...groups].map(([al, Ls]) => "L " + Ls.join(", ") + " at α " + al).join("\n"));
-    parts.push(ENT_FORMULA, "The chart compresses the gap between α = 0 and 0.5. From 0.5 to 1 the scale is linear.");
+    parts.push("", ENT_READING, "Follow one line to see how concentration changes with α at a fixed lattice size.");
     $("q-lright").dataset.tip = parts.join("\n");
   }
   drawLineChart($("lent-chart"), {

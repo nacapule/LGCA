@@ -151,6 +151,7 @@ svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
 .card .head .opts { margin-left: auto; }
 .card .head .seg button { min-height: 26px; padding: 4px 9px; font-size: 13px; }
 .legend { display: inline-flex; flex-wrap: wrap; gap: 3px 12px; color: var(--ink-2); }
+.legend:empty { display: none; }
 .legend .item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .nscale { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); margin-left: auto; }
 .nscale svg { display: block; overflow: visible; }
@@ -940,11 +941,11 @@ function fitYRange(data) {
   }
   if (top > 4000) { const p = Math.pow(10, Math.floor(Math.log10(top))); Y_RANGE = [1.5, Math.ceil(top / p) * p]; }
 }
-function styleLegend(host, forLate) {
+function styleLegend(host, forLate, routes = activeRoutes()) {
   host.replaceChildren();
-  const rules = activeRules(), routes = activeRoutes(), mk = forLate ? lateStyle : timeStyle;
-  if (bothRoutes()) for (const r of routes) host.append(h("span", { class: "item", "data-tip": ROUTES[r].def }, rules.length > 1 ? boxSample(r) : glyph(mk(r, rules[0]), "var(--ink-2)"), ROUTES[r].chip));
-  else for (const r of rules) host.append(h("span", { class: "item", "data-tip": RULES[r].def }, glyph(mk(routes[0], r), "var(--ink-2)"), RULES[r].chip));
+  const rules = activeRules(), mk = forLate ? lateStyle : timeStyle;
+  if (routes.length > 1) for (const r of routes) host.append(h("span", { class: "item", "data-tip": ROUTES[r].def }, rules.length > 1 ? boxSample(r) : glyph(mk(r, rules[0]), "var(--ink-2)"), ROUTES[r].chip));
+  else if (rules.length > 1) for (const r of rules) host.append(h("span", { class: "item", "data-tip": RULES[r].def }, glyph(mk(routes[0], r), "var(--ink-2)"), RULES[r].chip));
 }
 /* what the legend does not say: the box or island held fixed, and matched N */
 function timeCaption(series) {
@@ -1236,14 +1237,10 @@ function renderVsL() {
   const panels = rules.map((rule) => ({ rule, rows: lRows(T, rule) }));
   const first = panels[0].rows.find((r) => r.pts.length), win = first ? first.pts[0].val.win : null;
   const focusFit = panels.some((p) => p.rows.some((r) => r.alpha === focus && r.fit));
-  const legendFor = (host) => {
-    host.replaceChildren();
-    for (const r of rules) host.append(h("span", { class: "item", "data-tip": RULES[r].def }, glyph(lateStyle("size", r), "var(--ink-2)"), RULES[r].chip));
-  };
 
   // ----- density against L: one line per α, the highlighted one on top with its seed ranges and its fit
   $("lside-title").textContent = "Late island density vs L · step " + fmtStep(T);
-  legendFor($("lside-legend"));
+  styleLegend($("lside-legend"), true, ["size"]);
   const host = $("lside-chart"); host.replaceChildren(); host.classList.toggle("split", split);
   const shownN = [];
   for (const p of panels) { p.host = split ? h("div", { class: "chart" }) : host; if (split) host.append(p.host); }
@@ -1297,7 +1294,7 @@ function renderVsL() {
   const ecols = entropyCols(T), eSteps = (ecols.find((c) => c.pts.length) || { pts: [{ val: { steps: [] } }] }).pts[0].val.steps;
   if (slopeOn) {
     $("lright-title").textContent = "Slope vs α · step " + fmtStep(T);
-    legendFor($("lright-legend"));
+    styleLegend($("lright-legend"), true, ["size"]);
     const sSeries = [], sRanges = [], ends = [];
     for (const p of panels) {
       const st = lateStyle("size", p.rule), fr = p.rows.filter((r) => r.fit);

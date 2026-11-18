@@ -53,7 +53,7 @@ svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
 .top .settings { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
 /* the bar stays in view; charts keep fixed heights and the page scrolls */
 .stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 0 14px 10px; align-items: start; }
-.bar { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 7px 0 6px; background: var(--bg); box-shadow: 0 1px 0 var(--line); }
+.bar { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 0 6px; background: var(--bg); box-shadow: 0 1px 0 var(--line); }
 .charts { display: grid; gap: 10px; min-width: 0; }
 /* one α: the two time charts fill one screen between them, so their step axes can be read together */
 .card.time > .chart, .card.order > .chart { height: clamp(205px, calc((100vh - 262px) / 2), 460px); }
@@ -78,7 +78,7 @@ svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
 .grid { display: grid; gap: 8px; min-width: 0; }
 .grid .cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .gsec { grid-column: 1 / -1; font-weight: 650; font-size: 14px; padding: 6px 2px 0; }
-.mini { height: clamp(230px, calc((100vh - 214px) / 2), 420px); background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); min-height: 0; min-width: 0; display: flex; flex-direction: column; padding: 4px 4px 2px; }
+.mini { height: clamp(210px, calc((100vh - 214px) / 3), 340px); background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); min-height: 0; min-width: 0; display: flex; flex-direction: column; padding: 4px 4px 2px; }
 .mini .chart { flex: 1 1 auto; min-height: 0; }
 .bottom { padding: 6px 14px 10px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2px 28px; border-top: 1px solid var(--line); }
 .bottom details { min-width: 0; }
@@ -118,6 +118,7 @@ svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
 .seg button:hover { color: var(--ink); background: color-mix(in srgb, var(--surface) 60%, transparent); }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font-weight: 700; }
 .seg button:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.6; }
+#alpha-seg button { padding-inline: 7px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 /* boxes and islands: one per row; square marks for toggles, round ones for the presets */
 #route-picks.chips, #rule-picks.chips { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
@@ -142,6 +143,7 @@ svg.glyph { width: 26px; height: 12px; flex: none; overflow: visible; }
 .opts { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
 .keys { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .hint { font-size: 12.5px; color: var(--muted); }
+#lattice-select { font: inherit; font-size: 13.5px; min-height: 34px; padding: 4px 8px; border: 1px solid var(--axis); border-radius: 7px; color: var(--ink); background: var(--surface); }
 
 /* chart cards */
 .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px 10px 6px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -224,6 +226,10 @@ details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
         <span class="lab">Step axis</span>
         <div class="seg" id="axis-seg" role="group" aria-label="step axis"></div>
       </div>
+      <label class="blk" id="dim-lattice" hidden>
+        <span class="lab">Lattice size</span>
+        <select id="lattice-select" data-tip="Choose which lattice size to show in the time plots."></select>
+      </label>
       <div class="menuwrap" id="menuwrap">
         <span class="keys">keys <span class="q" id="q-keys" tabindex="0" role="button" aria-label="keyboard shortcuts">?</span></span>
         <button type="button" class="menubtn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu"></button>
@@ -297,7 +303,7 @@ details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
 <div class="pop" id="pop" hidden role="tooltip"></div>
 
 <!-- the notes at the bottom of the page: [{"title": ..., "text": ...}, ...] -->
-<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over steps 60,100 to 80,000, the new island's density grows 6.4 to 68 times, the old cluster's 5.0 to 41 times and the densest island's 7.5 to 93 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. At L 720, run at four α, the density is higher again: 1.04 to 1.68 times that at L 480 for every island definition. The values are in the data files."}, {"title": "At α 0 and 0.5 the new island's density changes by less than 4% from step 80,000 to 320,000.", "text": "Between the late values at steps 80,000 and 320,000 the seed mean changes by −3.7% to +1.3% in L 60 to 480, and by at most 2.3% over one doubling. At α 0.5 every box ran on to step 1,280,000: from step 320,000 the density changes by at most 1.2% in L 60 to 240 and falls by 4.7% in L 360 and 4.0% in L 480, where in four of the eight runs the island covers one or two more sites with the same particles. At α 0.8 over the same steps it changes by +9% to +56% in L 60 to 360, but by +0.3% in L 480 and −3% in L 720, and those two rose later (see Limits). In 55 of the 66 runs at α 0 and 0.5 the busiest site holds the same number of particles at every sample from step 5,000 to 320,000 (in the others it changes by 1 or 2), while the pile that holds them moves across the box."}, {"title": "At α 0.8 the new island's density rises in every box over the last doubling, later in bigger boxes.", "text": "All eight boxes, L 60 to 720, ran to step 1,280,000. Over the doubling to 1,280,000 it rises by 17% in L 60, 23% in L 90, 27% in L 120, 20% in L 180, 9.5% in L 240, 6% in L 360, 8% in L 480 and 4% in L 720 (all seeds up in 6 of the 8 boxes). The rise starts later in bigger boxes: over the doubling to 160,000 it is 31% in L 60 and 19% in L 90, but 5% to 10% in L 120 to 360; L 480 changes by less than 1% over each doubling to 640,000, and L 720 by −5%, +2% and +2%. At step 1,280,000 the island holds 76% of N in L 60, 41% in L 90, 21% in L 120, 18% in L 180, 13% in L 240, 9% in L 360, 5% in L 480 and 6% in L 720."}, {"title": "At α 0.85 the new island's density is still rising at step 1,280,000.", "text": "Every box from L 60 to 480 ran to step 1,280,000. Over the last doubling the density rises by 25% in L 90 (4 of 5 seeds up), 39% in L 120 (5 of 5), 23% in L 180 (4 of 5), 59% in L 240 (5 of 5), 62% in L 360 (4 of 4) and 49% in L 480 (4 of 4). In the three largest boxes it has risen over every doubling since step 80,000: L 240 by 41%, 66%, 74% and 59%, L 360 by 33%, 51%, 74% and 62%, L 480 by 16%, 35%, 81% and 49% (all seeds up each time, except 3 of 4 in L 480's first doubling). The island holds a growing share of N: at step 1,280,000, 92% in L 90, 67% in L 120, 75% in L 180, 38% in L 240, 26% in L 360 and 14% in L 480. L 60 moves without a trend, between 41 and 67 over the windows from step 160,000 on, with the island holding 73% to 79% of N."}, {"title": "At α 0.88 to 0.96 the longer runs rise in some boxes and fall in others.", "text": "Over the 128 doublings after step 80,000 in L 90 to 720, the new island's density changes by −56% to +233% (seed means, relative to the earlier window), and in 114 of them the seeds split. Where all seeds move the same way, the next doubling can go the other way: at α 0.9, L 240 falls 50% to step 640,000 (0 of 5 seeds up), then rises 98% to 1,280,000 (4 of 5 up); at α 0.94, L 360 falls 28% to 160,000 (0 of 4 up), then rises 36% to 320,000 (4 of 4 up); at α 0.92, L 480 falls 43% to 160,000 (0 of 4 up), rises 7% and 24% to 640,000 (3 and 4 of 4 up), then changes by −4% to 1,280,000 (1 of 4 up). At α 0.96, L 360 falls 9% to 640,000, then rises 24% to 1,280,000 (3 of 4 seeds up). In L 60 the island holds all but a few particles, spread over most of the box."}, {"title": "Against the box side, the slope at α 0.8 and 0.85 changes with the step.", "text": "Slope of ln(density) against ln(L) in the vs L view, new island. At α 0.8 (8 boxes, L 60 to 720) it falls: 1.10 ± 0.07 at step 80,000, 0.99 ± 0.08 at 160,000, 0.90 ± 0.06 at 320,000, 0.80 ± 0.06 at 640,000 and 0.73 ± 0.05 at 1,280,000, because the smaller boxes rise more (from step 80,000 to 1,280,000, +132% in L 60 and +2% in L 720). At α 0.85 it rises: 0.93 ± 0.10 at step 80,000, 1.13 ± 0.32 at 320,000, 1.30 ± 0.26 at 640,000 and 1.52 ± 0.30 at 1,280,000 (7 boxes, L 60 to 480). There the points do not lie on one line: at step 1,280,000 the slope is 2.7 over L 60 to 180 and 0.3 over L 180 to 480. At α 0 and 0.5 (7 boxes) it is 1.15 ± 0.07 and 1.16 ± 0.12 at step 320,000, within 0.01 of step 80,000. At α 0.5 it is 1.15 ± 0.12 at step 640,000 and 1.14 ± 0.12 at 1,280,000 (the same 7 boxes)."}, {"title": "From step 5,000 to 320,000, ln A − S changes little at α 0 and 0.5; at α 0.8 it rises to the end of the runs.", "text": "In all 66 runs at α 0 and 0.5, a run's highest and lowest ln A − S differ by at most 0.028 between steps 5,000 and 320,000, and by at most 0.017 between 80,000 and 320,000. All 33 runs at α 0.5 ran on to step 1,280,000: at most 0.038 from step 5,000 and 0.028 from step 80,000. At α 0.8, ln A − S rises in every run over steps 20,000 to 80,000, by 0.14 to 0.70 in L 60 and by 0.02 to 0.04 in L 720, and in every run over every doubling after that, to step 1,280,000: its seed mean goes from 4.20 to 5.27 in L 60 and from 6.18 to 6.37 in L 720. So while the island density at α 0.8 changed little near step 80,000, and in L 480 to step 640,000, the particles were gathering."}, {"title": "At α 0.85 the particles keep gathering to step 1,280,000, except in L 60.", "text": "In L 90 to 480 the seed mean of ln A − S rises over every doubling from step 80,000 to 1,280,000, where it is 5.99, 6.48, 7.45, 7.37, 7.50 and 7.38. Over the last doubling it rises by 0.29 to 0.54 (every seed up, except 3 of 5 in L 120). In L 60 three seeds end near 5.0 and two at 0.29, evenly spread."}, {"title": "Some runs spread out evenly again, among them every run in L 60 at α ≥ 0.88.", "text": "At their last saved step, 43 runs have ln A − S between 0.24 and 0.29 (the random start is at 0.14 to 0.15), and no run is between 0.3 and 0.8: at that step a run is either evenly spread or gathered. Evenly spread are every run in L 60 at α 0.88 to 1 (30 runs), 2 of 5 in L 60 at α 0.85, and in L 90 1 of 5 at α 0.92 and at α 0.94, 4 of 5 at α 0.96, and all 5 at α 1; no run in L 120 or larger, and none at α ≤ 0.8. A run can change between two saved lattices: at α 0.88, L 60, one seed's ln A − S goes from 3.13 at step 20,000 to 0.35 at step 40,000, and is at 0.25 to 0.28 at every later saved step, to step 1,280,000. The change can come late: two L 90 seeds at α 1 spread out by the saves at 460,000 and 700,000. At α 1 in L 720, all four seeds still show spatial concentration at step 1,280,000 (ln A − S from 2.33 to 2.70). The seed mean hides this; turn on single seeds."}, {"title": "At a fixed step, ln A − S falls with α, later in bigger boxes.", "text": "In the vs L view the right-hand card shows ln A − S against α at the chosen step, one line per box (its switch brings back the slope). At step 320,000 it is 3.8 to 6.2 for α ≤ 0.8 in every box; every box from L 90 to 360 has its highest value at α 0.85 (5.5 to 6.7), and L 480 at α 0.88 (7.6). It is below 3 from α 0.88 in L 90 and 120 and from α 0.92 in L 180 to 480; at step 80,000, from α 0.9 in L 180 and from 0.94 in L 480. The value 3 is only a marker: in the bigger boxes ln A − S falls gradually with α."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 0.9 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved from step 5,000 to 80,000, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 89% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are changes over finite times in finite boxes, not limiting densities. A setting that changes little over one doubling can still move over the next: at α 0.8, L 480 changes by less than 1% over each doubling to step 640,000, then by +8% to 1,280,000 (4 of 4 seeds up); at α 0.9, L 120 changes by +2% to step 320,000 and by +16% to 640,000 (4 of 5 seeds up). Every larger-box setting reaches 1,280,000, except α 0, which reaches 320,000. The spatial entropy comes from the saved lattices, one every 20,000 steps after step 20,000: a faster change is not resolved, and it is computed for the larger box only."}]</script>
+<script id="findings" type="application/json">[{"title": "Island density is much higher in bigger boxes.", "text": "From L 60 to L 480, averaged over steps 60,100 to 80,000, the new island's density grows 6.4 to 68 times, the old cluster's 5.0 to 41 times and the densest island's 7.5 to 93 times, depending on α. The growth is not always step by step: at some α a middle box size is lower than the one before. At L 720, run at four α, the density is higher again: 1.04 to 1.68 times that at L 480 for every island definition. The values are in the data files."}, {"title": "At α 0 and 0.5 the new island's density changes by less than 4% from step 80,000 to 320,000.", "text": "Between the late values at steps 80,000 and 320,000 the seed mean changes by −3.7% to +1.3% in L 60 to 480, and by at most 2.3% over one doubling. At α 0.5 every box ran on to step 1,280,000: from step 320,000 the density changes by at most 1.2% in L 60 to 240 and falls by 4.7% in L 360 and 4.0% in L 480, where in four of the eight runs the island covers one or two more sites with the same particles. At α 0.8 over the same steps it changes by +9% to +56% in L 60 to 360, but by +0.3% in L 480 and −3% in L 720, and those two rose later (see Limits). In 55 of the 66 runs at α 0 and 0.5 the busiest site holds the same number of particles at every sample from step 5,000 to 320,000 (in the others it changes by 1 or 2), while the pile that holds them moves across the box."}, {"title": "Intermediate α runs at fixed density.", "text": "The larger-box sweep includes α 0.72 in L 60, 90 and 120, and α 0.75 and 0.78 in L 60 to 240, with five seeds per setting. All reach step 1,280,000. The L 60 and L 90 runs at α 0.72 and 0.75 reach 2,560,000. The Lattice size selector holds L fixed across the time plots."}, {"title": "At α 0.8 the new island's density rises in every box over the last doubling, later in bigger boxes.", "text": "All eight boxes, L 60 to 720, ran to step 1,280,000. Over the doubling to 1,280,000 it rises by 17% in L 60, 23% in L 90, 27% in L 120, 20% in L 180, 9.5% in L 240, 6% in L 360, 8% in L 480 and 4% in L 720 (all seeds up in 6 of the 8 boxes). The rise starts later in bigger boxes: over the doubling to 160,000 it is 31% in L 60 and 19% in L 90, but 5% to 10% in L 120 to 360; L 480 changes by less than 1% over each doubling to 640,000, and L 720 by −5%, +2% and +2%. At step 1,280,000 the island holds 76% of N in L 60, 41% in L 90, 21% in L 120, 18% in L 180, 13% in L 240, 9% in L 360, 5% in L 480 and 6% in L 720."}, {"title": "At α 0.85 the new island's density is still rising at step 1,280,000.", "text": "Every box from L 60 to 480 ran to step 1,280,000. Over the last doubling the density rises by 25% in L 90 (4 of 5 seeds up), 39% in L 120 (5 of 5), 23% in L 180 (4 of 5), 59% in L 240 (5 of 5), 62% in L 360 (4 of 4) and 49% in L 480 (4 of 4). In the three largest boxes it has risen over every doubling since step 80,000: L 240 by 41%, 66%, 74% and 59%, L 360 by 33%, 51%, 74% and 62%, L 480 by 16%, 35%, 81% and 49% (all seeds up each time, except 3 of 4 in L 480's first doubling). The island holds a growing share of N: at step 1,280,000, 92% in L 90, 67% in L 120, 75% in L 180, 38% in L 240, 26% in L 360 and 14% in L 480. L 60 moves without a trend, between 41 and 67 over the windows from step 160,000 on, with the island holding 73% to 79% of N."}, {"title": "At α 0.88 to 0.96 the longer runs rise in some boxes and fall in others.", "text": "Over the 128 doublings after step 80,000 in L 90 to 720, the new island's density changes by −56% to +233% (seed means, relative to the earlier window), and in 114 of them the seeds split. Where all seeds move the same way, the next doubling can go the other way: at α 0.9, L 240 falls 50% to step 640,000 (0 of 5 seeds up), then rises 98% to 1,280,000 (4 of 5 up); at α 0.94, L 360 falls 28% to 160,000 (0 of 4 up), then rises 36% to 320,000 (4 of 4 up); at α 0.92, L 480 falls 43% to 160,000 (0 of 4 up), rises 7% and 24% to 640,000 (3 and 4 of 4 up), then changes by −4% to 1,280,000 (1 of 4 up). At α 0.96, L 360 falls 9% to 640,000, then rises 24% to 1,280,000 (3 of 4 seeds up). In L 60 the island holds all but a few particles, spread over most of the box."}, {"title": "Against the box side, the slope at α 0.8 and 0.85 changes with the step.", "text": "Slope of ln(density) against ln(L) in the vs L view, new island. At α 0.8 (8 boxes, L 60 to 720) it falls: 1.10 ± 0.07 at step 80,000, 0.99 ± 0.08 at 160,000, 0.90 ± 0.06 at 320,000, 0.80 ± 0.06 at 640,000 and 0.73 ± 0.05 at 1,280,000, because the smaller boxes rise more (from step 80,000 to 1,280,000, +132% in L 60 and +2% in L 720). At α 0.85 it rises: 0.93 ± 0.10 at step 80,000, 1.13 ± 0.32 at 320,000, 1.30 ± 0.26 at 640,000 and 1.52 ± 0.30 at 1,280,000 (7 boxes, L 60 to 480). There the points do not lie on one line: at step 1,280,000 the slope is 2.7 over L 60 to 180 and 0.3 over L 180 to 480. At α 0 and 0.5 (7 boxes) it is 1.15 ± 0.07 and 1.16 ± 0.12 at step 320,000, within 0.01 of step 80,000. At α 0.5 it is 1.15 ± 0.12 at step 640,000 and 1.14 ± 0.12 at 1,280,000 (the same 7 boxes)."}, {"title": "From step 5,000 to 320,000, ln A − S changes little at α 0 and 0.5; at α 0.8 it rises to the end of the runs.", "text": "In all 66 runs at α 0 and 0.5, a run's highest and lowest ln A − S differ by at most 0.028 between steps 5,000 and 320,000, and by at most 0.017 between 80,000 and 320,000. All 33 runs at α 0.5 ran on to step 1,280,000: at most 0.038 from step 5,000 and 0.028 from step 80,000. At α 0.8, ln A − S rises in every run over steps 20,000 to 80,000, by 0.14 to 0.70 in L 60 and by 0.02 to 0.04 in L 720, and in every run over every doubling after that, to step 1,280,000: its seed mean goes from 4.20 to 5.27 in L 60 and from 6.18 to 6.37 in L 720. So while the island density at α 0.8 changed little near step 80,000, and in L 480 to step 640,000, the particles were gathering."}, {"title": "At α 0.85 the particles keep gathering to step 1,280,000, except in L 60.", "text": "In L 90 to 480 the seed mean of ln A − S rises over every doubling from step 80,000 to 1,280,000, where it is 5.99, 6.48, 7.45, 7.37, 7.50 and 7.38. Over the last doubling it rises by 0.29 to 0.54 (every seed up, except 3 of 5 in L 120). In L 60 three seeds end near 5.0 and two at 0.29, evenly spread."}, {"title": "Some runs spread out evenly again, among them every run in L 60 at α ≥ 0.88.", "text": "At their last saved step, 43 runs have ln A − S between 0.24 and 0.29 (the random start is at 0.14 to 0.15), and no run is between 0.3 and 0.8: at that step a run is either evenly spread or gathered. Evenly spread are every run in L 60 at α 0.88 to 1 (30 runs), 2 of 5 in L 60 at α 0.85, and in L 90 1 of 5 at α 0.92 and at α 0.94, 4 of 5 at α 0.96, and all 5 at α 1; no run in L 120 or larger, and none at α ≤ 0.8. A run can change between two saved lattices: at α 0.88, L 60, one seed's ln A − S goes from 3.13 at step 20,000 to 0.35 at step 40,000, and is at 0.25 to 0.28 at every later saved step, to step 1,280,000. The change can come late: two L 90 seeds at α 1 spread out by the saves at 460,000 and 700,000. At α 1 in L 720, all four seeds still show spatial concentration at step 1,280,000 (ln A − S from 2.33 to 2.70). The seed mean hides this; turn on single seeds."}, {"title": "At a fixed step, ln A − S falls with α, later in bigger boxes.", "text": "In the vs L view the right-hand card shows ln A − S against α at the chosen step, one line per box (its switch brings back the slope). At step 320,000 it is 3.8 to 6.2 for α ≤ 0.8 in every box; every box from L 90 to 360 has its highest value at α 0.85 (5.5 to 6.7), and L 480 at α 0.88 (7.6). It is below 3 from α 0.88 in L 90 and 120 and from α 0.92 in L 180 to 480; at step 80,000, from α 0.9 in L 180 and from 0.94 in L 480. The value 3 is only a marker: in the bigger boxes ln A − S falls gradually with α."}, {"title": "How N grows matters.", "text": "At N ≈ 77,800, in the late values at step 20,000, the denser 90 × 90 box has 0.9 to 3.3 times the island density of the larger box, for every island definition."}, {"title": "The definitions often pick different islands.", "text": "In the lattices saved from step 5,000 to 80,000, the new island is also the densest island in about 65% of them (about 54% at α ≤ 0.8). In 89% of these lattices the densest island is at most 1.5 times as dense as the new island; the largest ratio is 11.5. In the smallest box (L 60) at α ≥ 0.88 the old cluster is about twice as dense as the new island."}, {"title": "Limits.", "text": "These are changes over finite times in finite boxes, not limiting densities. A setting that changes little over one doubling can still move over the next: at α 0.8, L 480 changes by less than 1% over each doubling to step 640,000, then by +8% to 1,280,000 (4 of 4 seeds up); at α 0.9, L 120 changes by +2% to step 320,000 and by +16% to 640,000 (4 of 5 seeds up). Every larger-box setting reaches at least 1,280,000 except α 0, which reaches 320,000. The spatial entropy comes from the saved lattices, one every 20,000 steps after step 20,000: a faster change is not resolved, and it is computed for the larger box only."}]</script>
 <script id="page-data" type="application/json"></script>
 <!-- the spatial entropy of every saved lattice of the larger box (build/entropy.py): {"entries": [...]} -->
 <script id="entropy-data" type="application/json"></script>
@@ -310,10 +316,10 @@ details.fold .body { padding: 4px 0 8px; font-size: 14px; color: var(--ink-2); }
 const CUT = 20000;                 // the denser-box runs end here; the default chart limit
 const MATCH_RATIO = 1.25;          // two N are "matched" when they differ by less than this factor
 const ROUTES = {
-  density: { label: "Denser 90 × 90 box", chip: "Denser 90×90", short: "denser box",
+  density: { label: "September density sweep (90 × 90)", chip: "Denser 90×90", short: "denser box",
              def: "90 × 90 box, 0.15 to 14.4 particles per site (N = 1.2k to 117k), to step 20,000; 25 α; 4 to 5 seeds." },
   size:    { label: "Larger box, 2.4 per site", chip: "Larger box", short: "larger box",
-             def: "2.4 particles per site, side L = 60 to 480 (N = 8.6k to 553k); L = 720 (1.24M) at α = 0.8, 0.9, 0.94, 1; 10 α; 5 seeds to L 240, 4 above." },
+             def: "2.4 particles per site, side L = 60 to 720 depending on α. Five seeds through L 240, four above." },
 };
 const ROUTE_ORDER = ["density", "size"];
 const DRAW_ORDER = ["size", "density"];           // the denser box on top
@@ -714,14 +720,15 @@ const state = {
   stepL: 80000,                               // the step of the "vs L" view; every larger-box run reaches 80,000
   lRight: "entropy",                          // the second chart of "vs L": "entropy" (against α) or "slope"
   axis: "log",                                // the step axis of the time charts: "log" or "linear"
+  lattice: null,                              // one L in the fixed-density time plots, or all sizes
   seeds: false,                               // spatial entropy: each seed as a thin line behind the seed means
   gridShow: "density",                        // what the all-α panels show: "density" or "entropy"
   menu: false,                                // the menu of boxes, islands and October comparisons is open
 };
 /* what the page shows at load, and what "Reset" in the menu returns to */
-const isDefaultChoice = () => sameSet(state.routes, ["size"]) && sameSet(state.rules, ["busiest"]) && state.longer && !state.matched && state.commonAlpha;
+const isDefaultChoice = () => sameSet(state.routes, ["size"]) && sameSet(state.rules, ["busiest"]) && state.longer && !state.matched && state.commonAlpha && state.lattice === null;
 const longerOn = () => state.longer && state.routes.has("size");
-function resetChoice() { state.routes = new Set(["size"]); state.rules = new Set(["busiest"]); state.longer = true; state.matched = false; state.commonAlpha = true; }
+function resetChoice() { state.routes = new Set(["size"]); state.rules = new Set(["busiest"]); state.longer = true; state.matched = false; state.commonAlpha = true; state.lattice = null; }
 /* the all-α panels show the spatial entropy, which uses no island: the island switches do not apply there */
 const entropyGrid = () => state.view === "grid" && state.gridShow === "entropy" && state.routes.has("size");
 let model = null;
@@ -750,12 +757,18 @@ const splitView = () => bothRoutes() && state.rules.size > 1;
 const commonAlphas = () => model.alphas.density.filter((a) => model.alphas.size.includes(a));
 const commonForced = () => bothRoutes() && state.matched;
 function alphasAvailable() {
-  if (state.view === "L") return model.alphas.size.slice();   // the larger box only
+  if (state.view === "L" || !state.routes.has("density") || (entropyGrid() && !commonForced())) return model.alphas.size.slice();
+  if (!state.routes.has("size")) return state.commonAlpha ? commonAlphas() : model.alphas.density.slice();
   if (state.commonAlpha || commonForced()) return commonAlphas();
   const set = new Set(activeRoutes().flatMap((r) => model.alphas[r]));
   return [...set].sort((a, b) => a - b);
 }
 const missingBoxNote = (alpha) => bothRoutes() && !model.alphas.size.includes(alpha) ? "denser box only" : null;
+const latticeFilter = () => state.routes.has("size") && !bothRoutes() ? state.lattice : null;
+function timeEntriesFor(route, alpha) {
+  const entries = model.entriesFor(route, alpha), L = latticeFilter();
+  return route === "size" && L !== null ? entries.filter((entry) => entry.L === L) : entries;
+}
 /* the shortest and longest larger-box run, formatted for display */
 function runEnds() { const ends = model.entries.size.map((e) => e.horizon).filter(isNum); return ends.length ? [Math.min(...ends), Math.max(...ends)].map((v) => v.toLocaleString("en-US")) : ["20,000"]; }
 let alphaNote = "";
@@ -764,7 +777,7 @@ function ensureAlpha() {
   if (!av.length || av.includes(state.alpha)) return;
   const from = state.alpha;
   state.alpha = av.reduce((b, a) => Math.abs(a - from) < Math.abs(b - from) ? a : b, av[0]);
-  alphaNote = "α " + from + ": denser box only → " + state.alpha;
+  alphaNote = "α " + from + " unavailable here";
 }
 /* line pattern = island (old dashed, new solid, densest dotted); line weight = box (denser thin with hollow
    markers, larger thick with filled markers). Buttons, legends and curves all use it. */
@@ -819,6 +832,9 @@ function renderRail() {
   // "vs L" draws the larger box only: the boxes, the presets (which choose boxes) and common α do not apply there
   const vsL = state.view === "L", noIsland = entropyGrid();
   $("dim-presets").hidden = vsL; $("dim-route").hidden = vsL; $("dim-step").hidden = !vsL; $("dim-axis").hidden = vsL; $("dim-rule").hidden = noIsland;
+  $("dim-alpha").hidden = state.view === "grid";
+  $("dim-lattice").hidden = vsL || !state.routes.has("size") || bothRoutes();
+  $("lattice-select").value = state.lattice === null ? "" : String(state.lattice);
   segControl($("axis-seg"), [{ value: "log", label: "log" }, { value: "linear", label: "linear", title: "Equal steps take equal width: the late part of a long run is spread out (X switches)" }], state.axis, (v) => { state.axis = v; renderAll(); });
   // the menu: its button names the boxes and islands drawn, and is outlined when they are not the ones at load
   {
@@ -861,14 +877,14 @@ function renderRail() {
   // α
   const av = alphasAvailable();
   segControl($("alpha-seg"), av.map((a) => ({ value: a, label: String(a) })), state.alpha, (a) => { state.alpha = a; renderAll(); });
-  const ao = $("alpha-opts"); ao.replaceChildren(); ao.hidden = vsL;
+  const ao = $("alpha-opts"); ao.replaceChildren(); ao.hidden = vsL || !state.routes.has("density");
   {
     const forced = commonForced(), ca = commonAlphas();
     const cb = h("input", { type: "checkbox", id: "opt-common", disabled: forced ? true : null }); cb.checked = forced || state.commonAlpha;
     cb.addEventListener("change", () => { state.commonAlpha = cb.checked; renderAll(); });
     ao.append(h("label", { class: "check" + (forced ? " off" : ""), for: "opt-common", "data-tip": "Only the " + ca.length + " α run in both boxes (" + ca.join(", ") + "): the same panels in every setting." + (forced ? "\nOn while matched N is on." : "") }, cb, "common α"));
   }
-  $("alpha-hint").textContent = alphaNote || (vsL ? (hasLineAt(state.alpha, state.stepL) ? "the highlighted line" : "no line at this step") : "");
+  $("alpha-hint").textContent = alphaNote || (vsL && !hasLineAt(state.alpha, state.stepL) ? "no line at this step" : "");
   segControl($("view-seg"), [{ value: "charts", label: "one α", title: "One α at a time: island density and spatial entropy over time, then the late island density against N (G switches)" }, { value: "grid", label: "all α", title: "Every α as small panels: island density or spatial entropy over time (G switches)" },
     { value: "L", label: "vs L", title: "Larger box at one step: the late island density against the box side L, one line per α, and beside it the spatial entropy against α, one line per box, or the slope of each density line (L key)" }], state.view, (v) => { state.view = v; renderAll(); });
   if (popEl && !popEl.isConnected) hidePop(true);   // its control was just redrawn
@@ -896,7 +912,7 @@ function timeSeriesFor(alpha, rules = activeRules()) {
   const series = [], shownN = [];
   for (const route of DRAW_ORDER) {
     if (!routes.includes(route)) continue;
-    let entries = model.entriesFor(route, alpha);
+    let entries = timeEntriesFor(route, alpha);
     if (pairs) entries = entries.filter((e) => pairs.some((p) => p[route] === e));
     const steps = model.steps[route];
     for (const rule of rules) {
@@ -994,14 +1010,14 @@ const ENT_TIP = ENT_DEF
 const ENT_VSL_TIP = ENT_DEF
   + "It is the Lab's spatial order times ln A (the Lab shows 1 − S / ln A).\n"
   + "Here, at the chosen step: for each run, the mean over its lattices saved in the same steps as the island density beside it (one every 20k), then the mean over the seeds. Bars: smallest and largest seed value. One line per box; a box whose runs stop before the step has no point at that α.\n"
-  + "The α axis is cut between 0.5 and 0.8, where no α was run: 0 to 0.5 is drawn short, 0.8 to 1 spread out.";
+  + "The α axis marks the gap between 0.5 and 0.72. Values from 0.72 to 1 are spread out.";
 function entropySeriesFor(alpha) {
   const means = [], singles = [], shownN = [];
   if (!state.routes.has("size")) return { series: [], shownN };
   const lim = state.longer ? Infinity : CUT;
   // the same boxes as the island density: with matched N, only the larger boxes that have a pair
   const pairs = bothRoutes() && state.matched ? matchedPairs(alpha) : null;
-  for (const e of model.entriesFor("size", alpha).filter((e) => !pairs || pairs.some((p) => p.size === e))) {
+  for (const e of timeEntriesFor("size", alpha).filter((e) => !pairs || pairs.some((p) => p.size === e))) {
     const en = model.entropy.get(alpha + "|" + e.L); if (!en) continue;
     const a = Math.log(e.L * e.L), color = nColor(e.N), at = new Map(en.steps.map((t, i) => [t, i]));
     shownN.push(e.N);
@@ -1217,11 +1233,9 @@ function entropyCols(T) {
 /* "mean over the lattices saved at steps 260k to 320k, then over seeds" or "the lattice saved at step 80k, mean over seeds" */
 const latticeText = (steps) => steps.length > 1 ? "mean over the lattices saved at steps " + fmtStep(steps[0]) + " to " + fmtStep(steps[steps.length - 1]) + ", then over seeds" : "the lattice saved at step " + fmtStep(steps[0]) + ", mean over seeds";
 const ENT_POINT = { width: 2, markers: true, shape: "circle" };
-/* the α axis of the entropy against α: no α was run between 0.5 and 0.8, so the axis is cut there; 0 to 0.5 is
-   drawn short and 0.8 to 1, where the α run lie 0.02 to 0.05 apart, is spread out (each part linear). The ticks
-   are the α run: the ends, 0.5, 0.8 and 0.9 first, the others where they fit. */
-const ENT_ALPHA_AXIS = { knots: [[0, 0], [0.5, 1.2], [0.8, 2.4], [1, 10.4]], domain: [-0.15, 1.008], breaks: [0.65], minGap: 34,
-  ticks: [0, 0.5, 0.8, 1, 0.9, 0.85, 0.94, 0.88, 0.92, 0.96] };
+/* Draw the gap between 0.5 and 0.72 separately from the closely spaced α values. */
+const ENT_ALPHA_AXIS = { knots: [[0, 0], [0.5, 1.2], [0.72, 2.4], [1, 10.4]], domain: [-0.15, 1.008], breaks: [0.61], minGap: 34,
+  ticks: [0, 0.5, 0.72, 0.8, 1, 0.75, 0.78, 0.9, 0.85, 0.94, 0.88, 0.92, 0.96] };
 function renderVsL() {
   const rules = activeRules(), T = state.stepL, focus = state.alpha, split = rules.length > 1;
   const sides = uniq(model.entries.size.map((e) => e.L));
@@ -1351,7 +1365,7 @@ function renderVsL() {
       rmiss.textContent = missing.join(" · "); rmiss.hidden = !missing.length;
     }
     drawLineChart($("lent-chart"), {
-      x: { type: "linear", label: "α  (no runs from 0.5 to 0.8)", ...ENT_ALPHA_AXIS, ticks: [...ENT_ALPHA_AXIS.ticks.filter((a) => model.alphas.size.includes(a)), ...model.alphas.size.filter((a) => !ENT_ALPHA_AXIS.ticks.includes(a))] },
+      x: { type: "linear", label: "α", ...ENT_ALPHA_AXIS, ticks: [...ENT_ALPHA_AXIS.ticks.filter((a) => model.alphas.size.includes(a)), ...model.alphas.size.filter((a) => !ENT_ALPHA_AXIS.ticks.includes(a))] },
       y: { type: "linear", label: "ln A − S", domain: [0, ENT_TOP], minChars: 3 }, refs: entropyRefs(true),   // short: the lines of the small boxes end near it
       series: eSeries, ranges: eRanges, hover: "point", leaders: true,
       aria: "spatial entropy against alpha at step " + T + ", one line per box side", emptyText: "No saved lattices in the last quarter up to step " + T.toLocaleString("en-US") + ".",
@@ -1474,7 +1488,7 @@ window.addEventListener("resize", () => { if (popEl) hidePop(true); });
 /* ---------- keyboard ---------- */
 function onKey(ev) {
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
-  const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
   const k = ev.key;
   if (k === "ArrowLeft" || k === "ArrowRight") {
     const av = alphasAvailable(); const i = av.indexOf(state.alpha); if (i < 0) return;
@@ -1509,6 +1523,14 @@ function boot() {
   let entropyData = null;
   try { entropyData = JSON.parse($("entropy-data").textContent || "null"); } catch (err) { entropyData = null; }
   model = buildModel(data, entropyData); fitYRange(data); fitEntropy();
+  const lattice = $("lattice-select");
+  const sizes = uniq(model.entries.size.map((e) => e.L)).sort((a, b) => a - b);
+  lattice.append(h("option", { value: "", text: "All sizes" }),
+    ...sizes.map((L) => h("option", { value: String(L), text: "L = " + L })));
+  lattice.addEventListener("change", () => {
+    state.lattice = lattice.value === "" ? null : Number(lattice.value);
+    renderAll();
+  });
   if (!model.alphas.size.includes(state.alpha) && model.alphas.size.length) state.alpha = model.alphas.size[0];
   document.addEventListener("keydown", onKey); wireMenu();
   renderAll(); renderDefs();

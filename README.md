@@ -10,13 +10,15 @@ and cluster. The C++ simulation runs directly in the browser.
 
 ## Island study
 
-An island is a connected group of occupied sites. The dashboard compares three ways
-to choose an island. The runs add particles either by filling a fixed box more
-densely or by enlarging the box at a fixed density.
+The dashboard opens on the runs that increase lattice size at a fixed density
+of 2.4 particles per site. The **New** island is the connected group of occupied
+sites containing the busiest site. The September preset shows the early 90 × 90
+density sweep.
 
-The larger-box runs reach 1.28 million steps for every α tested except α = 0, which
-reaches 320,000. Use **vs L** to compare boxes at the same step and **single seeds**
-to see how individual runs differ.
+The fixed-density runs include α = 0.72, 0.75 and 0.78. They reach at least
+1.28 million steps for every α except α = 0, which reaches 320,000. Use
+**Lattice size** to hold L fixed across the time plots, or **vs L** to compare
+boxes at the same step.
 
 [Island density over time](results/islands-2026-11-17/island-density-vs-time.csv) ·
 [Late densities and seed ranges](results/islands-2026-11-17/late-island-density.csv) ·

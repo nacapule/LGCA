@@ -15,10 +15,10 @@ of 2.4 particles per site. The **New** island is the connected group of occupied
 sites containing the busiest site. The September preset shows the early 90 × 90
 density sweep.
 
-The fixed-density runs include α = 0.72, 0.75 and 0.78, with saved runs through
-2.56 million steps at α = 0.72, 0.75 and 0.8 in the two smallest boxes. Use
-**Lattice size** to hold L fixed across the time plots, or **vs L** to compare
-boxes at the same step.
+The runs at α = 0.60 and 0.70 reach one million steps across seven lattice
+sizes. At α = 0.72, 0.75 and 0.80, the two smallest boxes reach 2.56 million
+steps. Use **Lattice size** to hold L fixed across the time plots, or choose
+**1M** in **vs L** to compare late values at the same step.
 
 [Island density over time](results/islands-2026-11-17/island-density-vs-time.csv) ·
 [Late densities and seed ranges](results/islands-2026-11-17/late-island-density.csv) ·
